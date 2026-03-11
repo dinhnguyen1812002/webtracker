@@ -1,0 +1,211 @@
+package templates
+
+import "web-tracker/domain"
+
+// AuthLayout provides a centered layout for login/register pages (no nav bar).
+templ AuthLayout(title string) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full bg-gray-50">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } — Uptime Monitor</title>
+			<script src="https://cdn.tailwindcss.com"></script>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+			<script>
+				tailwind.config = {
+					theme: {
+						extend: {
+							fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+						}
+					}
+				}
+			</script>
+			<link rel="stylesheet" href="/static/css/app.css"/>
+		</head>
+		<body class="h-full font-sans text-gray-900 antialiased">
+			<div class="min-h-full flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+				<div class="sm:mx-auto sm:w-full sm:max-w-md">
+					<h1 class="text-center text-2xl font-bold text-gray-900">Uptime Monitor</h1>
+				</div>
+				<div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+					<div class="bg-white py-8 px-6 shadow-sm rounded-xl border border-gray-200 sm:px-10">
+						{ children... }
+					</div>
+				</div>
+			</div>
+		</body>
+	</html>
+}
+
+// LoginFormData holds data for the login form template
+type LoginFormData struct {
+	Email     string
+	Error     string
+	CSRFToken string
+}
+
+// LoginForm renders the login page
+templ LoginForm(data LoginFormData) {
+	@AuthLayout("Login") {
+		<h2 class="text-lg font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+		if data.Error != "" {
+			<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+				<p class="text-sm text-red-700">{ data.Error }</p>
+			</div>
+		}
+		<form method="POST" action="/login" class="space-y-5" id="login-form">
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<div>
+				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+				<input
+					type="email"
+					id="email"
+					name="email"
+					value={ data.Email }
+					required
+					autocomplete="email"
+					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+					placeholder="you@example.com"
+				/>
+			</div>
+			<div>
+				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+				<input
+					type="password"
+					id="password"
+					name="password"
+					required
+					autocomplete="current-password"
+					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+					placeholder="••••••••"
+				/>
+			</div>
+			<button
+				type="submit"
+				class="w-full flex justify-center py-2.5 px-4 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+			>
+				Sign in
+			</button>
+		</form>
+		<p class="mt-6 text-center text-sm text-gray-500">
+			Don't have an account?
+			<a href="/register" class="font-medium text-teal-600 hover:text-teal-500 no-underline">Create one</a>
+		</p>
+	}
+}
+
+// RegisterFormData holds data for the registration form template
+type RegisterFormData struct {
+	Name      string
+	Email     string
+	Errors    map[string]string
+	CSRFToken string
+}
+
+// RegisterForm renders the registration page
+templ RegisterForm(data RegisterFormData) {
+	@AuthLayout("Register") {
+		<h2 class="text-lg font-semibold text-gray-900 mb-6">Create your account</h2>
+		if data.Errors["general"] != "" {
+			<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+				<p class="text-sm text-red-700">{ data.Errors["general"] }</p>
+			</div>
+		}
+		<form method="POST" action="/register" class="space-y-5" id="register-form">
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<div>
+				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Full name</label>
+				<input
+					type="text"
+					id="name"
+					name="name"
+					value={ data.Name }
+					required
+					autocomplete="name"
+					class={ "w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 " + authInputBorderClass(data.Errors["name"]) }
+					placeholder="John Doe"
+				/>
+				if data.Errors["name"] != "" {
+					<p class="mt-1 text-xs text-red-600">{ data.Errors["name"] }</p>
+				}
+			</div>
+			<div>
+				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+				<input
+					type="email"
+					id="email"
+					name="email"
+					value={ data.Email }
+					required
+					autocomplete="email"
+					class={ "w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 " + authInputBorderClass(data.Errors["email"]) }
+					placeholder="you@example.com"
+				/>
+				if data.Errors["email"] != "" {
+					<p class="mt-1 text-xs text-red-600">{ data.Errors["email"] }</p>
+				}
+			</div>
+			<div>
+				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+				<input
+					type="password"
+					id="password"
+					name="password"
+					required
+					autocomplete="new-password"
+					minlength="8"
+					class={ "w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 " + authInputBorderClass(data.Errors["password"]) }
+					placeholder="Minimum 8 characters"
+				/>
+				if data.Errors["password"] != "" {
+					<p class="mt-1 text-xs text-red-600">{ data.Errors["password"] }</p>
+				}
+			</div>
+			<div>
+				<label for="password_confirm" class="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+				<input
+					type="password"
+					id="password_confirm"
+					name="password_confirm"
+					required
+					autocomplete="new-password"
+					minlength="8"
+					class={ "w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 " + authInputBorderClass(data.Errors["password_confirm"]) }
+					placeholder="••••••••"
+				/>
+				if data.Errors["password_confirm"] != "" {
+					<p class="mt-1 text-xs text-red-600">{ data.Errors["password_confirm"] }</p>
+				}
+			</div>
+			<button
+				type="submit"
+				class="w-full flex justify-center py-2.5 px-4 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+			>
+				Create account
+			</button>
+		</form>
+		<p class="mt-6 text-center text-sm text-gray-500">
+			Already have an account?
+			<a href="/login" class="font-medium text-teal-600 hover:text-teal-500 no-underline">Sign in</a>
+		</p>
+	}
+}
+
+// helper to style input borders on validation error
+func authInputBorderClass(errMsg string) string {
+	if errMsg != "" {
+		return "border-red-300"
+	}
+	return "border-gray-300"
+}
+
+// getUserName safely returns the user's name or empty string
+func getUserName(user *domain.User) string {
+	if user != nil {
+		return user.Name
+	}
+	return ""
+}

@@ -1,0 +1,69 @@
+# Development Configuration for Uptime Monitoring System
+# This configuration is optimized for local development with Docker Compose
+
+server:
+  port: 8080
+  host: "0.0.0.0"
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 120s
+
+database:
+  host: "localhost"  # Use "postgres" when running in Docker Compose
+  port: 5433
+  database: "uptime_monitor"
+  user: "postgres"
+  password: "postgres"
+  ssl_mode: "disable"  # Disable SSL for local development
+  max_connections: 10  # Reduced for development
+  min_connections: 1
+  connect_timeout: 10s
+  max_conn_lifetime: 1h
+
+redis:
+  enabled: true
+  addr: "localhost:6380"  # Use "redis:6379" when running in Docker Compose
+  password: ""
+  db: 0
+  pool_size: 3  # Reduced for development
+  min_idle_conns: 1
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+# Alert channels are disabled by default for development
+# Enable them by setting the appropriate environment variables
+alert:
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+  email:
+    enabled: false
+    smtp_host: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    from_address: ""
+    from_name: "Uptime Monitor"
+    use_tls: true
+    use_starttls: true
+  webhook:
+    enabled: false
+    url: ""
+    timeout: 10s
+
+worker:
+  pool_size: 5  # Reduced for development
+  queue_size: 100  # Reduced for development
+  job_timeout: 60s
+  idle_timeout: 5m
+
+logging:
+  level: "debug"  # More verbose logging for development
+  format: "text"  # Easier to read in development
+  output: "stdout"
+
+session:
+  ttl: 24h                # Session duration
+  cookie_secure: false    # Set to true in production with HTTPS

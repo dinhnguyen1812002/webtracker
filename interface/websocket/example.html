@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uptime Monitor WebSocket Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .reconnecting { background-color: #fff3cd; color: #856404; }
+        .message {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 5px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .health-check { border-left: 4px solid #007bff; }
+        .alert { border-left: 4px solid #dc3545; }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Uptime Monitor WebSocket Example</h1>
+    
+    <div id="status" class="status disconnected">
+        Disconnected
+    </div>
+
+    <div class="controls">
+        <button id="connectBtn" class="btn-primary">Connect</button>
+        <button id="disconnectBtn" class="btn-secondary">Disconnect</button>
+        <button id="clearBtn" class="btn-danger">Clear Messages</button>
+    </div>
+
+    <div>
+        <h3>Connection Stats</h3>
+        <div id="stats"></div>
+    </div>
+
+    <div>
+        <h3>Messages</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script src="client.js"></script>
+    <script>
+        // Initialize WebSocket client
+        const wsClient = new UptimeMonitorWebSocket({
+            enableLogging: true,
+            maxReconnectAttempts: 5
+        });
+
+        // DOM elements
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const statsEl = document.getElementById('stats');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const clearBtn = document.getElementById('clearBtn');
+
+        // Connection state handlers
+        wsClient.onConnection((state, event) => {
+            updateStatus(state);
+            updateStats();
+            
+            switch (state) {
+                case 'connected':
+                    addMessage('system', 'Connected to WebSocket server');
+                    break;
+                case 'disconnected':
+                    addMessage('system', 'Disconnected from WebSocket server');
+                    break;
+                case 'reconnected':
+                    addMessage('system', 'Reconnected to WebSocket server');
+                    break;
+                case 'maxreconnect':
+                    addMessage('system', 'Max reconnection attempts reached');
+                    break;
+                case 'error':
+                    addMessage('system', 'WebSocket error occurred');
+                    break;
+            }
+        });
+
+        // Message handlers
+        wsClient.on('health_check_update', (data) => {
+            addMessage('health-check', `Health Check Update: ${data.monitor_id}`, data);
+        });
+
+        wsClient.on('alert', (data) => {
+            addMessage('alert', `Alert: ${data.type} - ${data.severity}`, data);
+        });
+
+        // Button handlers
+        connectBtn.addEventListener('click', () => {
+            wsClient.connect();
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            wsClient.disconnect();
+        });
+
+        clearBtn.addEventListener('click', () => {
+            messagesEl.innerHTML = '';
+        });
+
+        // Update status display
+        function updateStatus(state) {
+            statusEl.className = 'status';
+            
+            switch (state) {
+                case 'connected':
+                case 'reconnected':
+                    statusEl.classList.add('connected');
+                    statusEl.textContent = 'Connected';
+                    break;
+                case 'disconnected':
+                    statusEl.classList.add('disconnected');
+                    statusEl.textContent = 'Disconnected';
+                    break;
+                default:
+                    statusEl.classList.add('reconnecting');
+                    statusEl.textContent = 'Reconnecting...';
+                    break;
+            }
+        }
+
+        // Update connection statistics
+        function updateStats() {
+            const stats = wsClient.getStats();
+            statsEl.innerHTML = `
+                <p><strong>Reconnect Attempts:</strong> ${stats.reconnectAttempts}</p>
+                <p><strong>Is Reconnecting:</strong> ${stats.isReconnecting}</p>
+                <p><strong>Is Connected:</strong> ${stats.isConnected}</p>
+                <p><strong>Ready State:</strong> ${getReadyStateText(stats.readyState)}</p>
+            `;
+        }
+
+        // Get readable ready state text
+        function getReadyStateText(readyState) {
+            switch (readyState) {
+                case WebSocket.CONNECTING: return 'CONNECTING';
+                case WebSocket.OPEN: return 'OPEN';
+                case WebSocket.CLOSING: return 'CLOSING';
+                case WebSocket.CLOSED: return 'CLOSED';
+                default: return 'UNKNOWN';
+            }
+        }
+
+        // Add message to display
+        function addMessage(type, title, data = null) {
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            let content = `<strong>[${timestamp}] ${title}</strong>`;
+            
+            if (data) {
+                content += `<br><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            messageEl.innerHTML = content;
+            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
+            
+            // Limit to 50 messages
+            while (messagesEl.children.length > 50) {
+                messagesEl.removeChild(messagesEl.lastChild);
+            }
+        }
+
+        // Update stats periodically
+        setInterval(updateStats, 1000);
+
+        // Initialize display
+        updateStatus('disconnected');
+        updateStats();
+    </script>
+</body>
+</html>

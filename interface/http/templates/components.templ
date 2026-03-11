@@ -1,0 +1,79 @@
+package templates
+
+import (
+	"fmt"
+	"web-tracker/domain"
+)
+
+// StatCard renders a single statistic card for dashboard/monitor list.
+templ StatCard(label string, value string) {
+	<div class="bg-white border border-gray-200 rounded-lg p-5">
+		<p class="text-sm text-gray-500 mb-1">{ label }</p>
+		<p class="text-2xl font-semibold text-gray-900">{ value }</p>
+	</div>
+}
+
+// StatusBadge renders a pill-style status indicator.
+templ StatusBadge(status domain.HealthCheckStatus) {
+	if status == domain.StatusSuccess {
+		<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">{ string(status) }</span>
+	} else if status == domain.StatusFailure {
+		<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">{ string(status) }</span>
+	} else if status == domain.StatusTimeout {
+		<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{ string(status) }</span>
+	} else {
+		<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">{ string(status) }</span>
+	}
+}
+
+// StatusDot renders a small colored dot for status (used in lists).
+templ StatusDot(status domain.HealthCheckStatus) {
+	if status == domain.StatusSuccess {
+		<span class="inline-block w-2 h-2 rounded-full bg-teal-500 shrink-0" aria-hidden="true"></span>
+	} else if status == domain.StatusFailure {
+		<span class="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></span>
+	} else if status == domain.StatusTimeout {
+		<span class="inline-block w-2 h-2 rounded-full bg-gray-400 shrink-0" aria-hidden="true"></span>
+	} else {
+		<span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0" aria-hidden="true"></span>
+	}
+}
+
+// EmptyState renders an empty state with optional CTA.
+templ EmptyState(title string, description string, ctaAction string, ctaLabel string) {
+	<div class="text-center py-12 px-6">
+		<h3 class="text-base font-medium text-gray-900 mb-1">{ title }</h3>
+		<p class="text-sm text-gray-500 mb-4">{ description }</p>
+		if ctaAction != "" && ctaLabel != "" {
+			<button type="button" { templ.Attributes{"onclick": ctaAction}... } class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors cursor-pointer">
+				{ ctaLabel }
+			</button>
+		}
+	</div>
+}
+
+// BreadcrumbItem represents a single breadcrumb.
+templ Breadcrumb(href string, label string, isCurrent bool) {
+	if isCurrent {
+		<span class="text-sm text-gray-500" aria-current="page">{ label }</span>
+	} else {
+		<a href={ templ.URL(href) } class="text-sm text-gray-400 hover:text-teal-600 no-underline transition-colors">{ label }</a>
+	}
+}
+
+// SeverityBadge renders alert severity (critical, warning, info).
+templ SeverityBadge(severity domain.AlertSeverity) {
+	if severity == domain.SeverityCritical {
+		<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
+			{ string(severity) }
+		</span>
+	} else if severity == domain.SeverityWarning {
+		<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+			{ string(severity) }
+		</span>
+	} else {
+		<span class={ fmt.Sprintf("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700") }>
+			{ string(severity) }
+		</span>
+	}
+}

@@ -1,0 +1,101 @@
+package templates
+
+import (
+	"fmt"
+	"web-tracker/domain"
+)
+
+type MonitorListData struct {
+	Monitors []MonitorWithStatus
+	Stats    DashboardStats
+	User     *domain.User
+}
+
+templ MonitorList(data MonitorListData) {
+	@Layout("Monitors", data.User) {
+		<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+			<div>
+				<h1 class="text-xl font-semibold text-gray-900">Monitors</h1>
+				<p class="text-sm text-gray-500 mt-0.5">All configured monitors</p>
+			</div>
+			<button onclick="openNewMonitorModal()" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors cursor-pointer">
+				Add Monitor
+			</button>
+		</div>
+
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+			@StatCard("Total", fmt.Sprintf("%d", data.Stats.TotalMonitors))
+			@StatCard("Active", fmt.Sprintf("%d", data.Stats.ActiveMonitors))
+			@StatCard("Failing", fmt.Sprintf("%d", data.Stats.FailingMonitors))
+			@StatCard("Avg Uptime", fmt.Sprintf("%.1f%%", data.Stats.AverageUptime))
+		</div>
+
+		<section class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+			if len(data.Monitors) > 0 {
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead>
+							<tr class="border-b border-gray-200">
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monitor</th>
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Uptime (24h)</th>
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Response</th>
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Last check</th>
+								<th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"><span class="sr-only">Actions</span></th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-100">
+							for _, m := range data.Monitors {
+								<tr class="hover:bg-gray-50 transition-colors" data-monitor-id={ m.Monitor.ID }>
+									<td class="px-5 py-3.5">
+										<div class="flex items-center gap-2.5">
+											@StatusDot(m.Status)
+											<div>
+												<a href={ templ.URL(fmt.Sprintf("/monitors/%s", m.Monitor.ID)) } class="font-medium text-gray-900 hover:text-teal-600 no-underline">{ m.Monitor.Name }</a>
+												<p class="text-xs text-gray-400 mt-0.5">{ m.Monitor.URL }</p>
+											</div>
+										</div>
+									</td>
+									<td class="px-5 py-3.5">
+										@statusBadgeTw(m.Status)
+									</td>
+									<td class="px-5 py-3.5 text-sm text-gray-700 hidden sm:table-cell">
+										if m.UptimeStats != nil {
+											{ fmt.Sprintf("%.2f%%", m.UptimeStats.Period24h) }
+										} else {
+											<span class="text-gray-400">—</span>
+										}
+									</td>
+									<td class="px-5 py-3.5 text-sm text-gray-700 hidden sm:table-cell">
+										if m.ResponseTime != nil {
+											<span class="response-time">{ fmt.Sprintf("%.0fms", float64(m.ResponseTime.Milliseconds())) }</span>
+										} else {
+											<span class="text-gray-400">—</span>
+										}
+									</td>
+									<td class="px-5 py-3.5 text-sm text-gray-500 hidden sm:table-cell">
+										if m.LastCheck != nil {
+											<span class="last-check">{ m.LastCheck.Format("2006-01-02 15:04") }</span>
+										} else {
+											<span class="text-gray-400">Never</span>
+										}
+									</td>
+									<td class="px-5 py-3.5 text-sm">
+										<div class="flex gap-3">
+											<a href={ templ.URL(fmt.Sprintf("/monitors/%s", m.Monitor.ID)) } class="text-teal-600 hover:text-teal-800 no-underline font-medium">View</a>
+											<button { templ.Attributes{"onclick": fmt.Sprintf("openEditMonitorModal('%s')", m.Monitor.ID)}... } class="text-gray-500 hover:text-gray-700 font-medium cursor-pointer">Edit</button>
+										</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			} else {
+				@EmptyState("No monitors", "Get started by creating your first monitor.", "openNewMonitorModal()", "Add Monitor")
+			}
+		</section>
+
+		@MonitorFormModal()
+	}
+}

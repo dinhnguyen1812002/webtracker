@@ -1,0 +1,126 @@
+package templates
+
+import (
+	"fmt"
+	"web-tracker/domain"
+	"time"
+)
+
+type DashboardData struct {
+	Monitors []MonitorWithStatus
+	Stats    DashboardStats
+	User     *domain.User
+}
+
+type MonitorWithStatus struct {
+	Monitor     *domain.Monitor
+	Status      domain.HealthCheckStatus
+	LastCheck   *time.Time
+	ResponseTime *time.Duration
+	UptimeStats *UptimeStats
+}
+
+type UptimeStats struct {
+	Period24h float64
+	Period7d  float64
+	Period30d float64
+}
+
+type DashboardStats struct {
+	TotalMonitors   int
+	ActiveMonitors  int
+	FailingMonitors int
+	AverageUptime   float64
+}
+
+templ Dashboard(data DashboardData) {
+	@Layout("Dashboard", data.User) {
+		<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+			<div>
+				<h1 class="text-xl font-semibold text-gray-900">Dashboard</h1>
+				<p class="text-sm text-gray-500 mt-0.5">Overview of all configured monitors</p>
+			</div>
+			<button onclick="openNewMonitorModal()" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors cursor-pointer">
+				Add Monitor
+			</button>
+		</div>
+
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+			@StatCard("Total Monitors", fmt.Sprintf("%d", data.Stats.TotalMonitors))
+			@StatCard("Active", fmt.Sprintf("%d", data.Stats.ActiveMonitors))
+			@StatCard("Failing", fmt.Sprintf("%d", data.Stats.FailingMonitors))
+			@StatCard("Avg Uptime", fmt.Sprintf("%.2f%%", data.Stats.AverageUptime))
+		</div>
+
+		<section class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+			<div class="px-5 py-4 border-b border-gray-200">
+				<h2 class="text-base font-semibold text-gray-900">Monitors</h2>
+				<p class="text-sm text-gray-500 mt-0.5">Click a monitor for details</p>
+			</div>
+			if len(data.Monitors) > 0 {
+				<ul class="divide-y divide-gray-100">
+					for _, m := range data.Monitors {
+						<li>
+							<a href={ templ.URL(fmt.Sprintf("/monitors/%s", m.Monitor.ID)) } class="block px-5 py-4 hover:bg-gray-50 transition-colors no-underline" data-monitor-id={ m.Monitor.ID }>
+								<div class="flex items-center justify-between flex-wrap gap-3">
+									<div class="flex items-center gap-3">
+										@StatusDot(m.Status)
+										<div>
+											<p class="font-medium text-gray-900">{ m.Monitor.Name }</p>
+											<p class="text-xs text-gray-500 mt-0.5">{ m.Monitor.URL } · Every { fmt.Sprintf("%.0f", m.Monitor.CheckInterval.Minutes()) }min</p>
+										</div>
+										@statusBadgeTw(m.Status)
+									</div>
+									<div class="flex items-center gap-5 text-sm">
+										if m.UptimeStats != nil {
+											<div class="text-gray-500">
+												<span class="font-medium text-gray-900">{ fmt.Sprintf("%.2f%%", m.UptimeStats.Period24h) }</span> 24h
+											</div>
+										}
+										if m.ResponseTime != nil {
+											<div class="text-gray-500">
+												<span class="response-time font-medium text-gray-900">{ fmt.Sprintf("%.0fms", float64(m.ResponseTime.Milliseconds())) }</span> response
+											</div>
+										}
+										if m.LastCheck != nil {
+											<div class="text-gray-400 text-xs last-check">{ m.LastCheck.Format("15:04") }</div>
+										}
+									</div>
+								</div>
+							</a>
+						</li>
+					}
+				</ul>
+			} else {
+				@EmptyState("No monitors", "Get started by creating a new monitor.", "openNewMonitorModal()", "Add Monitor")
+			}
+		</section>
+
+		@MonitorFormModal()
+	}
+}
+
+func getStatusClass(status domain.HealthCheckStatus) string {
+	switch status {
+	case domain.StatusSuccess:
+		return "status-badge--success"
+	case domain.StatusFailure:
+		return "status-badge--failure"
+	case domain.StatusTimeout:
+		return "status-badge--timeout"
+	default:
+		return "status-badge--unknown"
+	}
+}
+
+templ statusBadgeTw(status domain.HealthCheckStatus) {
+	if status == domain.StatusSuccess {
+		<span class="monitor-status inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">{ string(status) }</span>
+	} else if status == domain.StatusFailure {
+		<span class="monitor-status inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">{ string(status) }</span>
+	} else if status == domain.StatusTimeout {
+		<span class="monitor-status inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{ string(status) }</span>
+	} else {
+		<span class="monitor-status inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">{ string(status) }</span>
+	}
+}

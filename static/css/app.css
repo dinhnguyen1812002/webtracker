@@ -1,0 +1,42 @@
+/**
+ * Uptime Monitor — Custom styles
+ * Tailwind handles all utility styling via CDN.
+ * This file only contains animations and overrides Tailwind cannot express.
+ */
+
+/* Auto-open details elements that have the class */
+details.open-details {
+  /* note: the 'open' attribute is set via JS below */
+}
+
+/* Pulse animation for WebSocket reconnecting state */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* Smooth details toggle */
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+details summary {
+  list-style: none;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
