@@ -163,7 +163,7 @@ templ MonitorForm(data MonitorFormData) {
 		@Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name)) {
 			@MonitorFormModal()
 			<script>
-				openEditMonitorModal('{ data.Monitor.ID }');
+				openEditMonitorModal({ fmt.Sprintf("%q", data.Monitor.ID) });
 			</script>
 		}
 	} else {

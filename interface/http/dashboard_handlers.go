@@ -2,8 +2,10 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +15,7 @@ import (
 	"web-tracker/usecase"
 )
 
-// DashboardHandler handles HTTP requests for dashboard pages
+// DashboardHandler handles HTTP requests for dashboard pages.
 type DashboardHandler struct {
 	monitorService  MonitorServiceInterface
 	healthCheckRepo domain.HealthCheckRepository
@@ -21,7 +23,7 @@ type DashboardHandler struct {
 	metricsService  usecase.MetricsService
 }
 
-// NewDashboardHandler creates a new dashboard handler
+// NewDashboardHandler creates a new dashboard handler.
 func NewDashboardHandler(
 	monitorService MonitorServiceInterface,
 	healthCheckRepo domain.HealthCheckRepository,
@@ -36,96 +38,171 @@ func NewDashboardHandler(
 	}
 }
 
-// Dashboard handles GET /
+// monitorSummary holds the aggregated result of fetching monitors with their status and metrics.
+type monitorSummary struct {
+	monitors      []templates.MonitorWithStatus
+	stats         templates.DashboardStats
+	averageUptime float64
+}
+
+// fetchMonitorsWithStatus concurrently fetches status and metrics for all monitors.
+// It uses a semaphore to cap concurrency at 10 goroutines.
+func (h *DashboardHandler) fetchMonitorsWithStatus(ctx context.Context, monitors []*domain.Monitor) monitorSummary {
+	const concurrencyLimit = 10
+
+	results := make([]templates.MonitorWithStatus, len(monitors))
+	sem := make(chan struct{}, concurrencyLimit)
+
+	var (
+		wg            sync.WaitGroup
+		mu            sync.Mutex
+		stats         templates.DashboardStats
+		totalUptime   float64
+		uptimeCount   int
+	)
+
+	stats.TotalMonitors = len(monitors)
+
+	for i, m := range monitors {
+		if m == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(idx int, m *domain.Monitor) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			mws := templates.MonitorWithStatus{
+				Monitor: m,
+				Status:  domain.HealthCheckStatus("unknown"),
+			}
+
+			var (
+				latestStatus domain.HealthCheckStatus
+				hasStatus    bool
+			)
+
+			if m.ID != "" {
+				if h.healthCheckRepo != nil {
+					if checks, err := h.healthCheckRepo.GetByMonitorID(ctx, m.ID, 1); err == nil && len(checks) > 0 {
+						chk := checks[0]
+						mws.Status = chk.Status
+						mws.LastCheck = &chk.CheckedAt
+						mws.ResponseTime = &chk.ResponseTime
+						latestStatus = chk.Status
+						hasStatus = true
+					}
+				}
+
+				if h.metricsService != nil {
+					if us, err := h.metricsService.GetUptimePercentage(ctx, m.ID); err == nil && us != nil {
+						mws.UptimeStats = &templates.UptimeStats{
+							Period24h: us.Period24h,
+							Period7d:  us.Period7d,
+							Period30d: us.Period30d,
+						}
+						mu.Lock()
+						totalUptime += us.Period24h
+						uptimeCount++
+						mu.Unlock()
+					} else if err != nil && err != context.DeadlineExceeded {
+						fmt.Printf("failed to get uptime stats for monitor %s: %v\n", m.ID, err)
+					}
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			if m.Enabled {
+				stats.ActiveMonitors++
+				if hasStatus && latestStatus != domain.StatusSuccess {
+					stats.FailingMonitors++
+				}
+			}
+			results[idx] = mws
+		}(i, m)
+	}
+
+	wg.Wait()
+
+	// Collect non-nil results preserving order.
+	out := make([]templates.MonitorWithStatus, 0, len(monitors))
+	for _, mws := range results {
+		if mws.Monitor != nil {
+			out = append(out, mws)
+		}
+	}
+
+	if uptimeCount > 0 {
+		stats.AverageUptime = totalUptime / float64(uptimeCount)
+	}
+
+	return monitorSummary{monitors: out, stats: stats}
+}
+
+// listAllMonitors fetches all monitors from the service.
+func (h *DashboardHandler) listAllMonitors(ctx context.Context) ([]*domain.Monitor, error) {
+	return h.monitorService.ListMonitors(ctx, domain.ListFilters{Limit: 1000})
+}
+
+// renderError writes a plain-text error response.
+func renderError(c *gin.Context, code int, msg string) {
+	c.String(code, msg)
+}
+
+// Dashboard handles GET /.
 // Requirements: 9.5
 func (h *DashboardHandler) Dashboard(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Get all monitors
-	monitors, err := h.monitorService.ListMonitors(ctx, domain.ListFilters{
-		Limit: 1000, // Get all monitors for dashboard
-	})
+	monitors, err := h.listAllMonitors(ctx)
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to load monitors",
-		})
+		renderError(c, http.StatusInternalServerError, "Failed to load monitors")
 		return
 	}
 
-	// Build dashboard data
-	dashboardData := templates.DashboardData{
-		Monitors: make([]templates.MonitorWithStatus, 0, len(monitors)),
-		Stats: templates.DashboardStats{
-			TotalMonitors: len(monitors),
-		},
-		User: GetUserFromContext(c),
+	summary := h.fetchMonitorsWithStatus(ctx, monitors)
+
+	data := templates.DashboardData{
+		Monitors: summary.monitors,
+		Stats:    summary.stats,
+		User:     GetUserFromContext(c),
 	}
 
-	var totalUptime float64
-	var uptimeCount int
-
-	// Get status and metrics for each monitor
-	for _, monitor := range monitors {
-		monitorWithStatus := templates.MonitorWithStatus{
-			Monitor: monitor,
-			Status:  domain.HealthCheckStatus("unknown"),
-		}
-
-		// Get latest health check
-		checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitor.ID, 1)
-		if err == nil && len(checks) > 0 {
-			latestCheck := checks[0]
-			monitorWithStatus.Status = latestCheck.Status
-			monitorWithStatus.LastCheck = &latestCheck.CheckedAt
-			monitorWithStatus.ResponseTime = &latestCheck.ResponseTime
-
-			// Count active/failing monitors
-			if monitor.Enabled {
-				dashboardData.Stats.ActiveMonitors++
-				if latestCheck.Status != domain.StatusSuccess {
-					dashboardData.Stats.FailingMonitors++
-				}
-			}
-		} else if monitor.Enabled {
-			dashboardData.Stats.ActiveMonitors++
-		}
-
-		// Get uptime stats
-		if h.metricsService != nil {
-			uptimeStats, err := h.metricsService.GetUptimePercentage(ctx, monitor.ID)
-			if err == nil {
-				monitorWithStatus.UptimeStats = &templates.UptimeStats{
-					Period24h: uptimeStats.Period24h,
-					Period7d:  uptimeStats.Period7d,
-					Period30d: uptimeStats.Period30d,
-				}
-				totalUptime += uptimeStats.Period24h
-				uptimeCount++
-			}
-		}
-
-		dashboardData.Monitors = append(dashboardData.Monitors, monitorWithStatus)
-	}
-
-	// Calculate average uptime
-	if uptimeCount > 0 {
-		dashboardData.Stats.AverageUptime = totalUptime / float64(uptimeCount)
-	}
-
-	// Render dashboard template
-	component := templates.Dashboard(dashboardData)
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	err = component.Render(ctx, c.Writer)
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render dashboard",
-		})
-		return
+	if err := templates.Dashboard(data).Render(c.Request.Context(), c.Writer); err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to render dashboard")
 	}
 }
 
-// MonitorDetail handles GET /monitors/:id
+// MonitorList handles GET /monitors.
+func (h *DashboardHandler) MonitorList(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	monitors, err := h.listAllMonitors(ctx)
+	if err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to load monitors")
+		return
+	}
+
+	summary := h.fetchMonitorsWithStatus(ctx, monitors)
+
+	data := templates.MonitorListData{
+		Monitors: summary.monitors,
+		Stats:    summary.stats,
+		User:     GetUserFromContext(c),
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	if err := templates.MonitorList(data).Render(c.Request.Context(), c.Writer); err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to render monitor list")
+	}
+}
+
+// MonitorDetail handles GET /monitors/:id.
 // Requirements: 9.5
 func (h *DashboardHandler) MonitorDetail(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -133,184 +210,66 @@ func (h *DashboardHandler) MonitorDetail(c *gin.Context) {
 
 	monitorID := c.Param("id")
 	if monitorID == "" {
-		c.HTML(http.StatusBadRequest, "", gin.H{
-			"error": "Monitor ID is required",
-		})
+		renderError(c, http.StatusBadRequest, "Monitor ID is required")
 		return
 	}
 
-	// Get monitor
 	monitor, err := h.monitorService.GetMonitor(ctx, monitorID)
 	if err != nil {
-		c.HTML(http.StatusNotFound, "", gin.H{
-			"error": "Monitor not found",
-		})
+		renderError(c, http.StatusNotFound, "Monitor not found")
 		return
 	}
 
-	// Build monitor detail data
-	detailData := templates.MonitorDetailData{
+	data := templates.MonitorDetailData{
 		Monitor: monitor,
 		User:    GetUserFromContext(c),
 	}
 
-	// Get latest health check
-	checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitorID, 1)
-	if err == nil && len(checks) > 0 {
-		detailData.LatestCheck = checks[0]
+	if checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitorID, 1); err == nil && len(checks) > 0 {
+		data.LatestCheck = checks[0]
 	}
 
-	// Get uptime stats
 	if h.metricsService != nil {
-		uptimeStats, err := h.metricsService.GetUptimePercentage(ctx, monitorID)
-		if err == nil {
-			detailData.UptimeStats = &templates.UptimeStats{
-				Period24h: uptimeStats.Period24h,
-				Period7d:  uptimeStats.Period7d,
-				Period30d: uptimeStats.Period30d,
+		if us, err := h.metricsService.GetUptimePercentage(ctx, monitorID); err == nil {
+			data.UptimeStats = &templates.UptimeStats{
+				Period24h: us.Period24h,
+				Period7d:  us.Period7d,
+				Period30d: us.Period30d,
 			}
 		}
-	}
-
-	// Get response time stats (24h period)
-	if h.metricsService != nil {
-		responseStats, err := h.metricsService.GetResponseTimeStats(ctx, monitorID, 24*time.Hour)
-		if err == nil {
-			detailData.ResponseStats = &templates.ResponseTimeStats{
+		if rs, err := h.metricsService.GetResponseTimeStats(ctx, monitorID, 24*time.Hour); err == nil {
+			data.ResponseStats = &templates.ResponseTimeStats{
 				Period:  "24h",
-				Average: responseStats.Average,
-				Min:     responseStats.Min,
-				Max:     responseStats.Max,
-				P95:     responseStats.P95,
-				P99:     responseStats.P99,
+				Average: rs.Average,
+				Min:     rs.Min,
+				Max:     rs.Max,
+				P95:     rs.P95,
+				P99:     rs.P99,
 			}
 		}
 	}
 
-	// Get recent health checks (last 10)
-	recentChecks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitorID, 10)
-	if err == nil {
-		detailData.RecentChecks = make([]domain.HealthCheck, len(recentChecks))
-		for i, check := range recentChecks {
-			detailData.RecentChecks[i] = *check
+	if checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitorID, 10); err == nil {
+		data.RecentChecks = make([]domain.HealthCheck, len(checks))
+		for i, chk := range checks {
+			data.RecentChecks[i] = *chk
 		}
 	}
 
-	// Get recent alerts (last 10)
-	recentAlerts, err := h.alertRepo.GetByMonitorID(ctx, monitorID, 10)
-	if err == nil {
-		detailData.RecentAlerts = make([]domain.Alert, len(recentAlerts))
-		for i, alert := range recentAlerts {
-			detailData.RecentAlerts[i] = *alert
+	if alerts, err := h.alertRepo.GetByMonitorID(ctx, monitorID, 10); err == nil {
+		data.RecentAlerts = make([]domain.Alert, len(alerts))
+		for i, a := range alerts {
+			data.RecentAlerts[i] = *a
 		}
 	}
 
-	// Render monitor detail template
-	component := templates.MonitorDetail(detailData)
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	err = component.Render(ctx, c.Writer)
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render monitor detail",
-		})
-		return
+	if err := templates.MonitorDetail(data).Render(c.Request.Context(), c.Writer); err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to render monitor detail")
 	}
 }
 
-// MonitorList handles GET /monitors
-func (h *DashboardHandler) MonitorList(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	// Get all monitors
-	monitors, err := h.monitorService.ListMonitors(ctx, domain.ListFilters{
-		Limit: 1000, // Get all monitors
-	})
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to load monitors",
-		})
-		return
-	}
-
-	// Build monitor list data (reuse dashboard logic)
-	dashboardData := templates.DashboardData{
-		Monitors: make([]templates.MonitorWithStatus, 0, len(monitors)),
-		Stats: templates.DashboardStats{
-			TotalMonitors: len(monitors),
-		},
-	}
-
-	var totalUptime float64
-	var uptimeCount int
-
-	// Get status and metrics for each monitor
-	for _, monitor := range monitors {
-		monitorWithStatus := templates.MonitorWithStatus{
-			Monitor: monitor,
-			Status:  domain.HealthCheckStatus("unknown"),
-		}
-
-		// Get latest health check
-		checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitor.ID, 1)
-		if err == nil && len(checks) > 0 {
-			latestCheck := checks[0]
-			monitorWithStatus.Status = latestCheck.Status
-			monitorWithStatus.LastCheck = &latestCheck.CheckedAt
-			monitorWithStatus.ResponseTime = &latestCheck.ResponseTime
-
-			// Count active/failing monitors
-			if monitor.Enabled {
-				dashboardData.Stats.ActiveMonitors++
-				if latestCheck.Status != domain.StatusSuccess {
-					dashboardData.Stats.FailingMonitors++
-				}
-			}
-		} else if monitor.Enabled {
-			dashboardData.Stats.ActiveMonitors++
-		}
-
-		// Get uptime stats
-		if h.metricsService != nil {
-			uptimeStats, err := h.metricsService.GetUptimePercentage(ctx, monitor.ID)
-			if err == nil {
-				monitorWithStatus.UptimeStats = &templates.UptimeStats{
-					Period24h: uptimeStats.Period24h,
-					Period7d:  uptimeStats.Period7d,
-					Period30d: uptimeStats.Period30d,
-				}
-				totalUptime += uptimeStats.Period24h
-				uptimeCount++
-			}
-		}
-
-		dashboardData.Monitors = append(dashboardData.Monitors, monitorWithStatus)
-	}
-
-	// Calculate average uptime
-	if uptimeCount > 0 {
-		dashboardData.Stats.AverageUptime = totalUptime / float64(uptimeCount)
-	}
-
-	// Convert to monitor list data
-	listData := templates.MonitorListData{
-		Monitors: dashboardData.Monitors,
-		Stats:    dashboardData.Stats,
-		User:     GetUserFromContext(c),
-	}
-
-	// Render monitor list template
-	component := templates.MonitorList(listData)
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	err = component.Render(ctx, c.Writer)
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render monitor list",
-		})
-		return
-	}
-}
-
+// AlertHistory handles GET /monitors/:id/alerts.
 // Requirements: 9.5
 func (h *DashboardHandler) AlertHistory(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -318,23 +277,41 @@ func (h *DashboardHandler) AlertHistory(c *gin.Context) {
 
 	monitorID := c.Param("id")
 	if monitorID == "" {
-		c.HTML(http.StatusBadRequest, "", gin.H{
-			"error": "Monitor ID is required",
-		})
+		renderError(c, http.StatusBadRequest, "Monitor ID is required")
 		return
 	}
 
-	// Get monitor
 	monitor, err := h.monitorService.GetMonitor(ctx, monitorID)
 	if err != nil {
-		c.HTML(http.StatusNotFound, "", gin.H{
-			"error": "Monitor not found",
-		})
+		renderError(c, http.StatusNotFound, "Monitor not found")
 		return
 	}
 
-	// Parse query parameters for filters
-	filters := templates.AlertFilters{
+	filters := parseAlertFilters(c)
+	rawAlerts, err := h.fetchAlerts(ctx, monitorID, filters)
+	if err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to load alerts")
+		return
+	}
+
+	filtered := applyAlertFilters(rawAlerts, filters)
+
+	data := templates.AlertHistoryData{
+		Monitor: monitor,
+		Alerts:  filtered,
+		Filters: filters,
+		User:    GetUserFromContext(c),
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	if err := templates.AlertHistory(data).Render(c.Request.Context(), c.Writer); err != nil {
+		renderError(c, http.StatusInternalServerError, "Failed to render alert history")
+	}
+}
+
+// parseAlertFilters reads query parameters from the request into an AlertFilters struct.
+func parseAlertFilters(c *gin.Context) templates.AlertFilters {
+	f := templates.AlertFilters{
 		Type:      c.Query("type"),
 		Severity:  c.Query("severity"),
 		StartDate: c.Query("start_date"),
@@ -342,183 +319,105 @@ func (h *DashboardHandler) AlertHistory(c *gin.Context) {
 		Page:      1,
 		Limit:     50,
 	}
-
-	// Parse page
-	if pageStr := c.Query("page"); pageStr != "" {
-		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
-			filters.Page = page
-		}
+	if page, err := strconv.Atoi(c.Query("page")); err == nil && page > 0 {
+		f.Page = page
 	}
-
-	// Parse limit
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
-			filters.Limit = limit
-		}
+	if limit, err := strconv.Atoi(c.Query("limit")); err == nil && limit > 0 && limit <= 100 {
+		f.Limit = limit
 	}
-
-	// Get alerts based on filters
-	var alerts []*domain.Alert
-
-	// Use date range query if both start and end are provided
-	if filters.StartDate != "" && filters.EndDate != "" {
-		start, err1 := time.Parse("2006-01-02", filters.StartDate)
-		end, err2 := time.Parse("2006-01-02", filters.EndDate)
-		if err1 == nil && err2 == nil {
-			// Add time to end date to include the entire day
-			end = end.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-			alerts, err = h.alertRepo.GetByDateRange(ctx, monitorID, start, end)
-		} else {
-			// Fall back to simple query if date parsing fails
-			alerts, err = h.alertRepo.GetByMonitorID(ctx, monitorID, filters.Limit)
-		}
-	} else {
-		// Use simple limit-based query
-		alerts, err = h.alertRepo.GetByMonitorID(ctx, monitorID, filters.Limit)
-	}
-
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to load alerts",
-		})
-		return
-	}
-
-	// Apply client-side filters (type and severity)
-	filteredAlerts := make([]domain.Alert, 0)
-	for _, alert := range alerts {
-		// Filter by type
-		if filters.Type != "" && string(alert.Type) != filters.Type {
-			continue
-		}
-		// Filter by severity
-		if filters.Severity != "" && string(alert.Severity) != filters.Severity {
-			continue
-		}
-		filteredAlerts = append(filteredAlerts, *alert)
-	}
-
-	// Build alert history data
-	historyData := templates.AlertHistoryData{
-		Monitor: monitor,
-		Alerts:  filteredAlerts,
-		Filters: filters,
-		User:    GetUserFromContext(c),
-	}
-
-	// Render alert history template
-	component := templates.AlertHistory(historyData)
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	err = component.Render(ctx, c.Writer)
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render alert history",
-		})
-		return
-	}
+	return f
 }
 
-// DashboardAPI handles GET /api/v1/dashboard
-// Returns dashboard data as JSON
+// fetchAlerts retrieves alerts for a monitor, using a date range query when both dates are set.
+func (h *DashboardHandler) fetchAlerts(ctx context.Context, monitorID string, f templates.AlertFilters) ([]*domain.Alert, error) {
+	if f.StartDate != "" && f.EndDate != "" {
+		start, err1 := time.Parse("2006-01-02", f.StartDate)
+		end, err2 := time.Parse("2006-01-02", f.EndDate)
+		if err1 == nil && err2 == nil {
+			end = end.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			return h.alertRepo.GetByDateRange(ctx, monitorID, start, end)
+		}
+	}
+	return h.alertRepo.GetByMonitorID(ctx, monitorID, f.Limit)
+}
+
+// applyAlertFilters filters a slice of alerts by type and severity.
+func applyAlertFilters(alerts []*domain.Alert, f templates.AlertFilters) []domain.Alert {
+	out := make([]domain.Alert, 0, len(alerts))
+	for _, a := range alerts {
+		if f.Type != "" && string(a.Type) != f.Type {
+			continue
+		}
+		if f.Severity != "" && string(a.Severity) != f.Severity {
+			continue
+		}
+		out = append(out, *a)
+	}
+	return out
+}
+
+// DashboardAPI handles GET /api/v1/dashboard and returns dashboard data as JSON.
 func (h *DashboardHandler) DashboardAPI(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Get all monitors
-	monitors, err := h.monitorService.ListMonitors(ctx, domain.ListFilters{
-		Limit: 1000, // Get all monitors for dashboard
-	})
+	monitors, err := h.listAllMonitors(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to load monitors",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load monitors"})
 		return
 	}
 
-	// Build dashboard data
-	type MonitorWithStatus struct {
+	// Re-use the same concurrent fetch as the HTML handlers.
+	summary := h.fetchMonitorsWithStatus(ctx, monitors)
+
+	// Map to the JSON response shape, keeping the API contract stable.
+	type uptimeStats struct {
+		Period24h float64 `json:"period_24h"`
+		Period7d  float64 `json:"period_7d"`
+		Period30d float64 `json:"period_30d"`
+	}
+	type monitorEntry struct {
 		Monitor      *domain.Monitor          `json:"monitor"`
 		Status       domain.HealthCheckStatus `json:"status"`
 		LastCheck    *time.Time               `json:"last_check,omitempty"`
 		ResponseTime *time.Duration           `json:"response_time,omitempty"`
-		UptimeStats  *struct {
-			Period24h float64 `json:"period_24h"`
-			Period7d  float64 `json:"period_7d"`
-			Period30d float64 `json:"period_30d"`
-		} `json:"uptime_stats,omitempty"`
+		UptimeStats  *uptimeStats             `json:"uptime_stats,omitempty"`
 	}
-
-	type DashboardStats struct {
+	type statsEntry struct {
 		TotalMonitors   int     `json:"total_monitors"`
 		ActiveMonitors  int     `json:"active_monitors"`
 		FailingMonitors int     `json:"failing_monitors"`
 		AverageUptime   float64 `json:"average_uptime"`
 	}
 
-	dashboardData := struct {
-		Monitors []MonitorWithStatus `json:"monitors"`
-		Stats    DashboardStats      `json:"stats"`
+	entries := make([]monitorEntry, 0, len(summary.monitors))
+	for _, mws := range summary.monitors {
+		e := monitorEntry{
+			Monitor:      mws.Monitor,
+			Status:       mws.Status,
+			LastCheck:    mws.LastCheck,
+			ResponseTime: mws.ResponseTime,
+		}
+		if mws.UptimeStats != nil {
+			e.UptimeStats = &uptimeStats{
+				Period24h: mws.UptimeStats.Period24h,
+				Period7d:  mws.UptimeStats.Period7d,
+				Period30d: mws.UptimeStats.Period30d,
+			}
+		}
+		entries = append(entries, e)
+	}
+
+	c.JSON(http.StatusOK, struct {
+		Monitors []monitorEntry `json:"monitors"`
+		Stats    statsEntry     `json:"stats"`
 	}{
-		Monitors: make([]MonitorWithStatus, 0, len(monitors)),
-		Stats: DashboardStats{
-			TotalMonitors: len(monitors),
+		Monitors: entries,
+		Stats: statsEntry{
+			TotalMonitors:   summary.stats.TotalMonitors,
+			ActiveMonitors:  summary.stats.ActiveMonitors,
+			FailingMonitors: summary.stats.FailingMonitors,
+			AverageUptime:   summary.stats.AverageUptime,
 		},
-	}
-
-	var totalUptime float64
-	var uptimeCount int
-
-	// Get status and metrics for each monitor
-	for _, monitor := range monitors {
-		monitorWithStatus := MonitorWithStatus{
-			Monitor: monitor,
-			Status:  domain.HealthCheckStatus("unknown"),
-		}
-
-		// Get latest health check
-		checks, err := h.healthCheckRepo.GetByMonitorID(ctx, monitor.ID, 1)
-		if err == nil && len(checks) > 0 {
-			latestCheck := checks[0]
-			monitorWithStatus.Status = latestCheck.Status
-			monitorWithStatus.LastCheck = &latestCheck.CheckedAt
-			monitorWithStatus.ResponseTime = &latestCheck.ResponseTime
-
-			// Count active/failing monitors
-			if monitor.Enabled {
-				dashboardData.Stats.ActiveMonitors++
-				if latestCheck.Status != domain.StatusSuccess {
-					dashboardData.Stats.FailingMonitors++
-				}
-			}
-		} else if monitor.Enabled {
-			dashboardData.Stats.ActiveMonitors++
-		}
-
-		// Get uptime stats
-		if h.metricsService != nil {
-			uptimeStats, err := h.metricsService.GetUptimePercentage(ctx, monitor.ID)
-			if err == nil {
-				monitorWithStatus.UptimeStats = &struct {
-					Period24h float64 `json:"period_24h"`
-					Period7d  float64 `json:"period_7d"`
-					Period30d float64 `json:"period_30d"`
-				}{
-					Period24h: uptimeStats.Period24h,
-					Period7d:  uptimeStats.Period7d,
-					Period30d: uptimeStats.Period30d,
-				}
-				totalUptime += uptimeStats.Period24h
-				uptimeCount++
-			}
-		}
-
-		dashboardData.Monitors = append(dashboardData.Monitors, monitorWithStatus)
-	}
-
-	// Calculate average uptime
-	if uptimeCount > 0 {
-		dashboardData.Stats.AverageUptime = totalUptime / float64(uptimeCount)
-	}
-
-	c.JSON(http.StatusOK, dashboardData)
+	})
 }

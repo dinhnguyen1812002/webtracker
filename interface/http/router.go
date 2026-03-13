@@ -66,7 +66,7 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 	{
 		health.GET("", r.systemHandler.Health)      // GET /health
 		health.GET("/ready", r.systemHandler.Ready) // GET /health/ready
-		health.GET("/live", r.systemHandler.Live)    // GET /health/live
+		health.GET("/live", r.systemHandler.Live)   // GET /health/live
 	}
 
 	// Metrics endpoint (no auth required — used by monitoring systems)
@@ -88,6 +88,7 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		protected.POST("/monitors", r.formHandler.CreateMonitorForm)       // POST /monitors - Create monitor (form)
 		protected.GET("/monitors/:id/edit", r.formHandler.EditMonitorForm) // GET /monitors/:id/edit - Edit monitor form
 		protected.POST("/monitors/:id", r.formHandler.UpdateMonitorForm)   // POST /monitors/:id - Update monitor (form with _method=PUT)
+		protected.POST("/monitors/:id/delete", r.formHandler.DeleteMonitorForm) // POST /monitors/:id/delete - Delete monitor
 	}
 
 	// API v1 routes (protected)

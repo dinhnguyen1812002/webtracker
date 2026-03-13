@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,4 +194,63 @@ func TestSystemHandler_Health(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "ok", response.Status)
 	assert.False(t, response.Timestamp.IsZero())
+}
+
+func TestDashboardHandler_Dashboard_NilMonitorEntries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockMonitorService := new(MockMonitorService)
+	handler := httppkg.NewDashboardHandler(mockMonitorService, nil, nil, nil)
+
+	testMonitor := &domain.Monitor{
+		ID:            "monitor-1",
+		Name:          "Test Monitor",
+		URL:           "https://example.com",
+		CheckInterval: 5 * time.Minute,
+		Enabled:       true,
+		AlertChannels: []domain.AlertChannel{},
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	mockMonitorService.On("ListMonitors", mock.Anything, mock.Anything).Return([]*domain.Monitor{nil, testMonitor}, nil)
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	// Provide logged-in user context to avoid nil user path issues
+	c.Set("user", &domain.User{ID: "u1", Email: "u1@example.com", Name: "U1"})
+
+	handler.Dashboard(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockMonitorService.AssertExpectations(t)
+}
+
+func TestAuthHandler_Login_WithoutAuthService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	handler := httppkg.NewAuthHandler(nil)
+
+	// Build request with form body
+	token, _ := domain.GenerateCSRFToken()
+
+	form := url.Values{}
+	form.Set("email", "user@example.com")
+	form.Set("password", "password123")
+	form.Set("csrf_token", token)
+
+	req, _ := http.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: token, Path: "/"})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	handler.Login(c)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

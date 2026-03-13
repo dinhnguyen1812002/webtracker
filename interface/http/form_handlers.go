@@ -37,9 +37,7 @@ func (h *FormHandler) NewMonitorForm(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	err := component.Render(c.Request.Context(), c.Writer)
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render form",
-		})
+		c.String(http.StatusInternalServerError, "Failed to render form")
 		return
 	}
 }
@@ -51,18 +49,14 @@ func (h *FormHandler) EditMonitorForm(c *gin.Context) {
 
 	monitorID := c.Param("id")
 	if monitorID == "" {
-		c.HTML(http.StatusBadRequest, "", gin.H{
-			"error": "Monitor ID is required",
-		})
+		c.String(http.StatusBadRequest, "Monitor ID is required")
 		return
 	}
 
 	// Get monitor
 	monitor, err := h.monitorService.GetMonitor(ctx, monitorID)
 	if err != nil {
-		c.HTML(http.StatusNotFound, "", gin.H{
-			"error": "Monitor not found",
-		})
+		c.String(http.StatusNotFound, "Monitor not found")
 		return
 	}
 
@@ -76,9 +70,7 @@ func (h *FormHandler) EditMonitorForm(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	err = component.Render(ctx, c.Writer)
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "", gin.H{
-			"error": "Failed to render form",
-		})
+		c.String(http.StatusInternalServerError, "Failed to render form")
 		return
 	}
 }
@@ -109,9 +101,7 @@ func (h *FormHandler) CreateMonitorForm(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		err := component.Render(ctx, c.Writer)
 		if err != nil {
-			c.HTML(http.StatusInternalServerError, "", gin.H{
-				"error": "Failed to render form",
-			})
+			c.String(http.StatusInternalServerError, "Failed to render form")
 		}
 		return
 	}
@@ -139,9 +129,7 @@ func (h *FormHandler) CreateMonitorForm(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		err = component.Render(ctx, c.Writer)
 		if err != nil {
-			c.HTML(http.StatusInternalServerError, "", gin.H{
-				"error": "Failed to render form",
-			})
+			c.String(http.StatusInternalServerError, "Failed to render form")
 		}
 		return
 	}
@@ -157,18 +145,14 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 
 	monitorID := c.Param("id")
 	if monitorID == "" {
-		c.HTML(http.StatusBadRequest, "", gin.H{
-			"error": "Monitor ID is required",
-		})
+		c.String(http.StatusBadRequest, "Monitor ID is required")
 		return
 	}
 
 	// Get existing monitor
 	existingMonitor, err := h.monitorService.GetMonitor(ctx, monitorID)
 	if err != nil {
-		c.HTML(http.StatusNotFound, "", gin.H{
-			"error": "Monitor not found",
-		})
+		c.String(http.StatusNotFound, "Monitor not found")
 		return
 	}
 
@@ -196,9 +180,7 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		err := component.Render(ctx, c.Writer)
 		if err != nil {
-			c.HTML(http.StatusInternalServerError, "", gin.H{
-				"error": "Failed to render form",
-			})
+			c.String(http.StatusInternalServerError, "Failed to render form")
 		}
 		return
 	}
@@ -238,15 +220,34 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		err = component.Render(ctx, c.Writer)
 		if err != nil {
-			c.HTML(http.StatusInternalServerError, "", gin.H{
-				"error": "Failed to render form",
-			})
+			c.String(http.StatusInternalServerError, "Failed to render form")
 		}
 		return
 	}
 
 	// Redirect to monitor detail page
 	c.Redirect(http.StatusSeeOther, "/monitors/"+monitorID)
+}
+
+// DeleteMonitorForm handles POST /monitors/:id/delete
+func (h *FormHandler) DeleteMonitorForm(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	monitorID := c.Param("id")
+	if monitorID == "" {
+		c.String(http.StatusBadRequest, "Monitor ID is required")
+		return
+	}
+
+	err := h.monitorService.DeleteMonitor(ctx, monitorID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to delete monitor")
+		return
+	}
+
+	// Redirect to dashboard
+	c.Redirect(http.StatusSeeOther, "/")
 }
 
 // parseMonitorForm parses form data and returns a CreateMonitorRequest and validation errors

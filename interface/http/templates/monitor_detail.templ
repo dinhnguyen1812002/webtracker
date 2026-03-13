@@ -42,7 +42,9 @@ templ MonitorDetail(data MonitorDetailData) {
 			</div>
 			<div class="flex gap-2">
 				<button { templ.Attributes{"onclick": fmt.Sprintf("openEditMonitorModal('%s')", data.Monitor.ID)}... } class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors cursor-pointer">Edit</button>
-				<button type="button" class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 border border-transparent rounded-md transition-colors cursor-pointer" onclick="deleteMonitor()">Delete</button>
+				<form method="POST" action={ templ.URL(fmt.Sprintf("/monitors/%s/delete", data.Monitor.ID)) } onsubmit="return confirm('Delete this monitor? This cannot be undone.');" class="inline m-0">
+					<button type="submit" class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 border border-transparent rounded-md transition-colors cursor-pointer">Delete</button>
+				</form>
 			</div>
 		</div>
 
@@ -245,18 +247,6 @@ templ MonitorDetail(data MonitorDetailData) {
 			</div>
 		</div>
 
-		<script>
-			function deleteMonitor() {
-				if (confirm('Delete this monitor? This cannot be undone.')) {
-					fetch('/api/v1/monitors/' + '{ data.Monitor.ID }', { method: 'DELETE' })
-						.then(function(r) {
-							if (r.ok) window.location.href = '/';
-							else alert('Delete failed.');
-						})
-						.catch(function() { alert('Delete failed.'); });
-				}
-			}
-		</script>
 
 		@MonitorFormModal()
 	}
