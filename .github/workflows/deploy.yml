@@ -40,5 +40,6 @@ jobs:
           script: |
             cd /app
             sudo docker compose pull
-            sudo docker compose up -d
+            sudo docker compose up -d --force-recreate --remove-orphans
+            sudo docker image prune -f
 
