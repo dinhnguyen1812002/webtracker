@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # PostgreSQL Database
   postgres:
@@ -29,24 +31,10 @@ services:
     container_name: uptime-monitor-redis
     command: valkey-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
-      - redis_data:/datadocker compose pull
+      - redis_data:/data
     ports:
       - "${REDIS_PORT:-6380}:6379"
     networks:
-      - uptime-monitor
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  # Uptime Monitor Application
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfiletworks:
       - uptime-monitor
     restart: unless-stopped
     healthcheck:
@@ -65,27 +53,16 @@ services:
     environment:
       # Server configuration
       PORT: ${PORT:-8080}
-      
+
       # Database configuration (will be read from config.yaml)
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      
+
       # Worker configuration
       WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-8}
-      
-    container_name: uptime-monitor-app
-    environment:
-      # Server configuration
-      PORT: ${PORT:-8080}
-      
-      # Database configuration (will be read from config.yaml)
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      
-      # Worker configuration
-      WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-8}
-      
+
       # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      
+
       # Alert configuration (only set these if you want to enable alerts)
       # TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       # TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
