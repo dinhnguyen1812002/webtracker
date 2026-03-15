@@ -64,10 +64,23 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}   # ← add this secret
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
+          script_stop: true   # ← dừng ngay nếu có lệnh lỗi
           script: |
+            echo ">>> Step 1: cd /app"
             cd /app
+
+            echo ">>> Step 2: Pull image"
             docker compose pull
+
+            echo ">>> Step 3: Up containers"
             docker compose up -d --force-recreate --remove-orphans
+
+            echo ">>> Step 4: Running containers"
+            docker ps
+
+            echo ">>> Step 5: Prune"
             docker image prune -f
+
+            echo ">>> DONE"
