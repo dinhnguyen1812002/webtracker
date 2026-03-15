@@ -9,6 +9,16 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: valkey/valkey:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -22,6 +32,8 @@ jobs:
       - name: Run tests
         run: |
           go test ./...
+        env:
+          REDIS_ADDR: 127.0.0.1:6379
 
   build-and-deploy:
 
