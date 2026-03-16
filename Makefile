@@ -1,11 +1,11 @@
 # Uptime Monitor Makefile
 
-.PHONY: help build run test clean docker-build docker-run migrate-up migrate-down dev-setup
+.PHONY: help build run test clean docker-build docker-run migrate-up migrate-down dev-setup build-css
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build the application binary"
+	@echo "  build-css    - Build CSS with Tailwind"
 	@echo "  run          - Run the application"
 	@echo "  test         - Run all tests"
 	@echo "  clean        - Clean build artifacts"
@@ -17,8 +17,12 @@ help:
 	@echo "  templ        - Generate templ templates"
 
 # Build the application
-build: templ
+build: templ build-css
 	CGO_ENABLED=0 go build -ldflags='-w -s' -o main ./cmd/main.go
+
+# Build CSS with Tailwind
+build-css:
+	npm run build:css
 
 # Run the application
 run: build

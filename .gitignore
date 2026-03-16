@@ -111,4 +111,8 @@ fabric.properties
 .env
 .env.local
 
+# Node.js
+node_modules/
+package-lock.json
+
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,goland+all

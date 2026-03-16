@@ -1,0 +1,11 @@
+{
+  "name": "web-tracker",
+  "version": "1.0.0",
+  "description": "Uptime Monitor",
+  "scripts": {
+    "build:css": "tailwindcss -i ./static/css/input.css -o ./static/css/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

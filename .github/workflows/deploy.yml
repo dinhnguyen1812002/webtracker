@@ -63,19 +63,27 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          username: devv
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script_stop: true   # ← dừng ngay nếu có lệnh lỗi
           script: |
+            echo ">>> Whoami"
+            whoami
+            
+            echo ">>> Docker version"
+            docker --version
+            docker compose version
+
             echo ">>> Step 1: cd /app"
-            cd /app
-            ls
+            cd /app || { echo "FAIL: /app not found"; exit 1; }
+            ls -la
+
             echo ">>> Step 2: Pull image"
-            docker compose pull
+            docker compose pull || { echo "FAIL: docker compose pull"; exit 1; }
 
             echo ">>> Step 3: Up containers"
-            docker compose up -d
+            docker compose up -d || { echo "FAIL: docker compose up"; exit 1; }
 
             echo ">>> Step 4: Running containers"
             docker ps
