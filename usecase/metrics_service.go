@@ -18,6 +18,11 @@ type MetricsServiceImpl struct {
 
 // NewMetricsService creates a new metrics service
 func NewMetricsService(healthCheckRepo domain.HealthCheckRepository, redisClient MetricsRedisClient) MetricsService {
+	// Return nil if healthCheckRepo is nil to prevent panics
+	if healthCheckRepo == nil {
+		return nil
+	}
+
 	return &MetricsServiceImpl{
 		healthCheckRepo: healthCheckRepo,
 		redisClient:     redisClient,
@@ -26,6 +31,11 @@ func NewMetricsService(healthCheckRepo domain.HealthCheckRepository, redisClient
 
 // GetUptimePercentage calculates uptime percentage for a monitor over different time periods
 func (s *MetricsServiceImpl) GetUptimePercentage(ctx context.Context, monitorID string) (*UptimeStats, error) {
+	// Defensive check
+	if s == nil || s.healthCheckRepo == nil {
+		return nil, fmt.Errorf("metrics service or health check repository is nil")
+	}
+
 	// Try to get from cache first
 	cacheKey := fmt.Sprintf("cache:metrics:%s:uptime", monitorID)
 	var stats UptimeStats

@@ -135,8 +135,6 @@ func main() {
 	baseMonitorRepo := postgres.NewMonitorRepository(pool)
 	healthCheckRepo := postgres.NewHealthCheckRepository(pool)
 	alertRepo := postgres.NewAlertRepository(pool)
-	userRepo := postgres.NewUserRepository(pool)
-	sessionRepo := postgres.NewSessionRepository(pool)
 
 	// Create Redis client (if enabled)
 	var redisClient *redis.Client
@@ -238,9 +236,6 @@ func main() {
 		websocketManager,
 	)
 
-	// Create auth service
-	authService := usecase.NewAuthService(userRepo, sessionRepo, cfg.Session.TTL)
-
 	// Create HTTP server using config
 	serverConfig := httpInterface.DefaultServerConfig()
 	serverConfig.Port = cfg.Server.Port
@@ -256,7 +251,6 @@ func main() {
 		scheduler,
 		monitorRepo,
 		websocketManager,
-		authService,
 	)
 
 	log.Info("Starting HTTP server", logger.Fields{

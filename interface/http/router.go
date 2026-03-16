@@ -17,8 +17,6 @@ type Router struct {
 	systemHandler      *SystemHandler
 	dashboardHandler   *DashboardHandler
 	formHandler        *FormHandler
-	authHandler        *AuthHandler
-	authMiddleware     *AuthMiddleware
 	websocketHandler   *websocket.Handler
 }
 
@@ -33,7 +31,6 @@ func NewRouter(
 	scheduler usecase.Scheduler,
 	monitorRepo domain.MonitorRepository,
 	websocketManager websocket.Manager,
-	authService *usecase.AuthService,
 ) *Router {
 	return &Router{
 		monitorHandler:     NewMonitorHandler(monitorService),
@@ -43,8 +40,6 @@ func NewRouter(
 		systemHandler:      NewSystemHandler(workerPool, scheduler, healthCheckRepo, monitorRepo),
 		dashboardHandler:   NewDashboardHandler(monitorService, healthCheckRepo, alertRepo, metricsService),
 		formHandler:        NewFormHandler(monitorService),
-		authHandler:        NewAuthHandler(authService),
-		authMiddleware:     NewAuthMiddleware(authService),
 		websocketHandler:   websocketManager.GetHandler(),
 	}
 }
@@ -53,13 +48,6 @@ func NewRouter(
 func (r *Router) SetupRoutes(engine *gin.Engine) {
 	// Static assets (no auth required)
 	engine.Static("/static", "./static")
-
-	// Public auth routes (no authentication required)
-	engine.GET("/login", r.authHandler.ShowLoginForm)
-	engine.POST("/login", r.authHandler.Login)
-	engine.GET("/register", r.authHandler.ShowRegisterForm)
-	engine.POST("/register", r.authHandler.Register)
-	engine.POST("/logout", r.authHandler.Logout)
 
 	// System health endpoints (no auth required — used by load balancers/probes)
 	health := engine.Group("/health")
@@ -72,28 +60,21 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 	// Metrics endpoint (no auth required — used by monitoring systems)
 	engine.GET("/metrics", r.systemHandler.Metrics) // GET /metrics
 
-	// Protected routes — require authentication
-	protected := engine.Group("/")
-	protected.Use(r.authMiddleware.RequireAuth())
-	protected.Use(r.authMiddleware.CSRFProtection())
-	{
-		// Dashboard routes (HTML)
-		protected.GET("/", r.dashboardHandler.Dashboard)                       // GET / - Main dashboard
-		protected.GET("/monitors", r.dashboardHandler.MonitorList)             // GET /monitors - Monitor list page
-		protected.GET("/monitors/:id", r.dashboardHandler.MonitorDetail)       // GET /monitors/:id - Monitor detail page
-		protected.GET("/monitors/:id/alerts", r.dashboardHandler.AlertHistory) // GET /monitors/:id/alerts - Alert history page
+	// Dashboard routes (HTML)
+	engine.GET("/", r.dashboardHandler.Dashboard)                       // GET / - Main dashboard
+	engine.GET("/monitors", r.dashboardHandler.MonitorList)             // GET /monitors - Monitor list page
+	engine.GET("/monitors/:id", r.dashboardHandler.MonitorDetail)       // GET /monitors/:id - Monitor detail page
+	engine.GET("/monitors/:id/alerts", r.dashboardHandler.AlertHistory) // GET /monitors/:id/alerts - Alert history page
 
-		// Form routes (HTML)
-		protected.GET("/monitors/new", r.formHandler.NewMonitorForm)       // GET /monitors/new - New monitor form
-		protected.POST("/monitors", r.formHandler.CreateMonitorForm)       // POST /monitors - Create monitor (form)
-		protected.GET("/monitors/:id/edit", r.formHandler.EditMonitorForm) // GET /monitors/:id/edit - Edit monitor form
-		protected.POST("/monitors/:id", r.formHandler.UpdateMonitorForm)   // POST /monitors/:id - Update monitor (form with _method=PUT)
-		protected.POST("/monitors/:id/delete", r.formHandler.DeleteMonitorForm) // POST /monitors/:id/delete - Delete monitor
-	}
+	// Form routes (HTML)
+	engine.GET("/monitors/new", r.formHandler.NewMonitorForm)            // GET /monitors/new - New monitor form
+	engine.POST("/monitors", r.formHandler.CreateMonitorForm)            // POST /monitors - Create monitor (form)
+	engine.GET("/monitors/:id/edit", r.formHandler.EditMonitorForm)      // GET /monitors/:id/edit - Edit monitor form
+	engine.POST("/monitors/:id", r.formHandler.UpdateMonitorForm)        // POST /monitors/:id - Update monitor (form with _method=PUT)
+	engine.POST("/monitors/:id/delete", r.formHandler.DeleteMonitorForm) // POST /monitors/:id/delete - Delete monitor
 
-	// API v1 routes (protected)
+	// API v1 routes
 	v1 := engine.Group("/api/v1")
-	v1.Use(r.authMiddleware.RequireAuth())
 	{
 		// Dashboard endpoint
 		v1.GET("/dashboard", r.dashboardHandler.DashboardAPI) // GET /api/v1/dashboard
@@ -120,10 +101,9 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		}
 	}
 
-	// WebSocket endpoint (protected)
+	// WebSocket endpoint
 	if r.websocketHandler != nil {
 		ws := engine.Group("/")
-		ws.Use(r.authMiddleware.RequireAuth())
 		ws.GET("/ws", r.websocketHandler.HandleWebSocket) // WS /ws
 	}
 }

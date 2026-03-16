@@ -1,10 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +32,7 @@ func NewDashboardHandler(
 	alertRepo domain.AlertRepository,
 	metricsService usecase.MetricsService,
 ) *DashboardHandler {
+	fmt.Printf("NewDashboardHandler: metricsService = %v\n", metricsService)
 	return &DashboardHandler{
 		monitorService:  monitorService,
 		healthCheckRepo: healthCheckRepo,
@@ -54,11 +57,11 @@ func (h *DashboardHandler) fetchMonitorsWithStatus(ctx context.Context, monitors
 	sem := make(chan struct{}, concurrencyLimit)
 
 	var (
-		wg            sync.WaitGroup
-		mu            sync.Mutex
-		stats         templates.DashboardStats
-		totalUptime   float64
-		uptimeCount   int
+		wg          sync.WaitGroup
+		mu          sync.Mutex
+		stats       templates.DashboardStats
+		totalUptime float64
+		uptimeCount int
 	)
 
 	// Be defensive: monitors can contain nil entries (e.g. partial failures upstream).
@@ -118,6 +121,9 @@ func (h *DashboardHandler) fetchMonitorsWithStatus(ctx context.Context, monitors
 					} else if err != nil && err != context.DeadlineExceeded {
 						fmt.Printf("failed to get uptime stats for monitor %s: %v\n", m.ID, err)
 					}
+				} else {
+					// metricsService is nil, skip uptime calculation
+					fmt.Printf("metricsService is nil, skipping uptime calculation for monitor %s\n", m.ID)
 				}
 			}
 
@@ -163,16 +169,21 @@ func renderError(c *gin.Context, code int, msg string) {
 // Dashboard handles GET /.
 // Requirements: 9.5
 func (h *DashboardHandler) Dashboard(c *gin.Context) {
+	fmt.Printf("=== Dashboard handler called ===\n")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
 	monitors, err := h.listAllMonitors(ctx)
 	if err != nil {
+		fmt.Printf("Failed to load monitors: %v\n", err)
 		renderError(c, http.StatusInternalServerError, "Failed to load monitors")
 		return
 	}
+	fmt.Printf("Loaded %d monitors\n", len(monitors))
 
 	summary := h.fetchMonitorsWithStatus(ctx, monitors)
+	fmt.Printf("Summary stats: Total=%d, Active=%d, Failing=%d, AvgUptime=%.2f\n",
+		summary.stats.TotalMonitors, summary.stats.ActiveMonitors, summary.stats.FailingMonitors, summary.stats.AverageUptime)
 
 	data := templates.DashboardData{
 		Monitors: summary.monitors,
@@ -180,10 +191,40 @@ func (h *DashboardHandler) Dashboard(c *gin.Context) {
 		User:     GetUserFromContext(c),
 	}
 
+	fmt.Printf("Dashboard data: Stats = %+v, Monitors count = %d\n", summary.stats, len(summary.monitors))
+
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	if err := templates.Dashboard(data).Render(c.Request.Context(), c.Writer); err != nil {
+
+	// Debug: Check what we're about to render
+	fmt.Printf("About to render dashboard with %d monitors and stats: %+v\n", len(data.Monitors), data.Stats)
+
+	// Try to render to a buffer first to see what we get
+	var buf bytes.Buffer
+	if err := templates.Dashboard(data).Render(c.Request.Context(), &buf); err != nil {
+		fmt.Printf("Failed to render dashboard to buffer: %v\n", err)
 		renderError(c, http.StatusInternalServerError, "Failed to render dashboard")
+		return
 	}
+
+	// Check if buffer has content
+	if buf.Len() == 0 {
+		fmt.Printf("Dashboard template rendered empty content!\n")
+	} else {
+		fmt.Printf("Dashboard template rendered %d bytes\n", buf.Len())
+		// Check if it contains our stats
+		content := buf.String()
+		if strings.Contains(content, "Total Monitors") {
+			fmt.Printf("Template contains 'Total Monitors'\n")
+		} else {
+			fmt.Printf("Template does NOT contain 'Total Monitors'\n")
+		}
+	}
+
+	// Write to response
+	if _, err := c.Writer.Write(buf.Bytes()); err != nil {
+		fmt.Printf("Failed to write response: %v\n", err)
+	}
+	fmt.Printf("=== Dashboard handler completed ===\n")
 }
 
 // MonitorList handles GET /monitors.
