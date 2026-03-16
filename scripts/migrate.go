@@ -51,6 +51,8 @@ func main() {
 			User:     *user,
 			Password: *password,
 			SSLMode:  *sslMode,
+			MaxConns: 10,
+			MinConns: 1,
 		}
 	}
 

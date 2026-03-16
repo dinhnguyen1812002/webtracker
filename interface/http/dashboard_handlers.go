@@ -61,7 +61,13 @@ func (h *DashboardHandler) fetchMonitorsWithStatus(ctx context.Context, monitors
 		uptimeCount   int
 	)
 
-	stats.TotalMonitors = len(monitors)
+	// Be defensive: monitors can contain nil entries (e.g. partial failures upstream).
+	// Avoid panics and report totals based on actual non-nil monitors.
+	for _, m := range monitors {
+		if m != nil {
+			stats.TotalMonitors++
+		}
+	}
 
 	for i, m := range monitors {
 		if m == nil {
@@ -70,6 +76,9 @@ func (h *DashboardHandler) fetchMonitorsWithStatus(ctx context.Context, monitors
 		wg.Add(1)
 		go func(idx int, m *domain.Monitor) {
 			defer wg.Done()
+			if m == nil {
+				return
+			}
 			sem <- struct{}{}
 			defer func() { <-sem }()
 

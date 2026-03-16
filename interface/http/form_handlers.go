@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -153,6 +154,16 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 	existingMonitor, err := h.monitorService.GetMonitor(ctx, monitorID)
 	if err != nil {
 		c.String(http.StatusNotFound, "Monitor not found")
+		return
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(c.PostForm("_method")))
+	if method == "DELETE" {
+		if err := h.monitorService.DeleteMonitor(ctx, monitorID); err != nil {
+			c.String(http.StatusInternalServerError, "Failed to delete monitor")
+			return
+		}
+		c.Redirect(http.StatusSeeOther, "/")
 		return
 	}
 

@@ -51,7 +51,8 @@ services:
       start_period: 5s
 
   app:
-    image: ${DOCKER_USERNAME}/webtracker:latest  # dùng image từ Docker Hub thay vì build local
+    image: dinhnguyen1812002/webtracker:latest  # dùng image từ Docker Hub thay vì build local
+  
     container_name: uptime-monitor-app
     environment:
       PORT: ${PORT:-8080}

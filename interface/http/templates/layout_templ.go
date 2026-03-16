@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import "web-tracker/domain"
 
 // Layout provides the base HTML structure.
-// JS is only used for: WebSocket connection (real-time updates) and delete confirmation.
+// JS is only used for: WebSocket connection (real-time updates).
 // The user parameter is optional — if nil, auth-related nav items are hidden.
 func Layout(title string, user ...*domain.User) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -34,7 +34,7 @@ func Layout(title string, user ...*domain.User) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\" class=\"h-full bg-gray-50\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -47,30 +47,30 @@ func Layout(title string, user ...*domain.User) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — Uptime Monitor</title><script src=\"https://cdn.tailwindcss.com\"></script><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap\" rel=\"stylesheet\"><script>\n\t\t\t\ttailwind.config = {\n\t\t\t\t\ttheme: {\n\t\t\t\t\t\textend: {\n\t\t\t\t\t\t\tfontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/css/app.css\"></head><body class=\"h-full font-sans text-gray-900 antialiased\"><nav class=\"bg-white border-b border-gray-200\"><div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\"><div class=\"flex items-center justify-between h-14\"><a href=\"/\" class=\"text-lg font-semibold text-gray-900 hover:text-gray-700 no-underline\">Uptime Monitor</a><div class=\"flex items-center gap-6\"><a href=\"/\" class=\"text-sm font-medium text-gray-500 hover:text-teal-600 no-underline transition-colors\">Dashboard</a> <a href=\"/monitors\" class=\"text-sm font-medium text-gray-500 hover:text-teal-600 no-underline transition-colors\">Monitors</a><div id=\"connection-status\" class=\"flex items-center gap-1.5 text-xs text-gray-400\" aria-live=\"polite\"><span id=\"status-indicator\" class=\"w-2 h-2 rounded-full bg-gray-300\" aria-hidden=\"true\"></span> <span id=\"status-text\">Connecting...</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — Uptime Monitor</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap\" rel=\"stylesheet\"><link rel=\"stylesheet\" href=\"/static/css/app.css\"></head><body><nav class=\"nav\"><div class=\"container nav__inner\"><a href=\"/\" class=\"nav__brand\">Uptime Monitor</a><div class=\"nav__links\"><a href=\"/\" class=\"nav__link\">Dashboard</a> <a href=\"/monitors\" class=\"nav__link\">Monitors</a><div id=\"connection-status\" class=\"status\" aria-live=\"polite\"><span id=\"status-indicator\" class=\"status__dot\" aria-hidden=\"true\"></span> <span id=\"status-text\">Connecting...</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(user) > 0 && user[0] != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"flex items-center gap-3 ml-2 pl-4 border-l border-gray-200\"><span class=\"text-sm text-gray-600\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"nav__links\" style=\"gap: 0.75rem;\"><span class=\"text-muted\" style=\"margin:0;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(user[0].Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `interface/http/templates/layout.templ`, Line: 46, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `interface/http/templates/layout.templ`, Line: 33, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span><form method=\"POST\" action=\"/logout\" class=\"inline\"><button type=\"submit\" class=\"text-sm font-medium text-gray-400 hover:text-red-500 transition-colors cursor-pointer\">Logout</button></form></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span><form method=\"POST\" action=\"/logout\" class=\"inline\"><button type=\"submit\" class=\"btn btn--secondary\">Logout</button></form></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div></div></div></nav><main class=\"py-6 sm:py-8\"><div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div></div></nav><main class=\"main\"><div class=\"container\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
