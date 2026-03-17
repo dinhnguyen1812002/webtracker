@@ -76,7 +76,7 @@ jobs:
             docker compose version
 
             echo ">>> Step 1: cd /app"
-            cd /app || { echo "FAIL: /app not found"; exit 1; }
+            cd /home/dev/app || { echo "FAIL: /app not found"; exit 1; }
             ls -la
 
             echo ">>> Step 2: Pull image"
