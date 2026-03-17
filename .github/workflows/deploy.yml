@@ -63,12 +63,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: devv
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script_stop: true   # ← dừng ngay nếu có lệnh lỗi
           script: |
-            echo ">>> Whoami"
+            echo ">>> Whoami"`
             whoami
             
             echo ">>> Docker version"
