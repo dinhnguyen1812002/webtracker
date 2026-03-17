@@ -16,21 +16,28 @@ templ Layout(title string, user ...*domain.User) {
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 			<link rel="stylesheet" href="/static/css/app.css"/>
+			<link rel="stylesheet" href="/static/css/input.css"/>
+	
 		</head>
 		<body>
 			<nav class="nav">
 				<div class="container nav__inner">
-					<a href="/" class="nav__brand">Uptime Monitor-123</a>
+					<div class="nav__links" style="gap: 0.75rem;">
+						<a href="/" class="nav__brand">Uptime Monitor-123</a>
+						if len(user) > 0 && user[0] != nil {
+							<span class="text-muted" style="margin:0;">{ user[0].Name }</span>
+						}
+					</div>
 					<div class="nav__links">
 						<a href="/" class="nav__link">Dashboard</a>
 						<a href="/monitors" class="nav__link">Monitors</a>
 						<div id="connection-status" class="status" aria-live="polite">
 							<span id="status-indicator" class="status__dot" aria-hidden="true"></span>
 							<span id="status-text">Connecting...</span>
+							
 						</div>
 							if len(user) > 0 && user[0] != nil {
 								<div class="nav__links" style="gap: 0.75rem;">
-									<span class="text-muted" style="margin:0;">{ user[0].Name }</span>
 									<form method="POST" action="/logout" class="inline">
 										<button type="submit" class="btn btn--secondary">
 											Logout

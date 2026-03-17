@@ -52,6 +52,7 @@ func NewServer(
 	scheduler usecase.Scheduler,
 	monitorRepo domain.MonitorRepository,
 	websocketManager websocket.Manager,
+	authService *usecase.AuthService,
 ) *Server {
 	// Create router with all handlers
 	router := NewRouter(
@@ -64,6 +65,7 @@ func NewServer(
 		scheduler,
 		monitorRepo,
 		websocketManager,
+		authService,
 	)
 
 	return &Server{

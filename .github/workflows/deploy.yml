@@ -103,16 +103,31 @@ jobs:
             # Khởi động lại chỉ app container (postgres & redis giữ nguyên)
             docker compose up -d --no-deps app || { echo "FAIL: docker compose up"; exit 1; }
 
-            # Chờ container khởi động
-            echo ">>> Waiting for app to start..."
-            sleep 20
+            # Kiểm tra health với vòng lặp chờ
+            echo ">>> Waiting for app to become healthy..."
+            MAX_RETRIES=12 # 12 * 5s = 60s
+            RETRY_COUNT=0
+            STATUS="starting"
 
-            # Kiểm tra health
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' uptime-monitor-app 2>/dev/null || echo "not_found")
-            echo ">>> Health status: $STATUS"
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' uptime-monitor-app 2>/dev/null || echo "not_found")
+              echo ">>> Attempt $((RETRY_COUNT+1)): Health status is '$STATUS'"
+              
+              if [ "$STATUS" == "healthy" ]; then
+                break
+              fi
+              
+              if [ "$STATUS" == "unhealthy" ]; then
+                echo "FAIL: App became unhealthy"
+                break
+              fi
+              
+              RETRY_COUNT=$((RETRY_COUNT+1))
+              sleep 5
+            done
 
             if [ "$STATUS" != "healthy" ]; then
-              echo "FAIL: App not healthy (status=$STATUS)"
+              echo "FAIL: Deployment validation failed (status=$STATUS)"
               echo ">>> Container logs:"
               docker logs uptime-monitor-app --tail 50
               
@@ -121,6 +136,7 @@ jobs:
                 PREV_TAG=$(cat .previous_tag)
                 echo ">>> Rolling back to $PREV_TAG..."
                 IMAGE_TAG="$PREV_TAG" docker compose up -d --no-deps app
+                echo "$PREV_TAG" > .current_tag
               fi
               
               exit 1

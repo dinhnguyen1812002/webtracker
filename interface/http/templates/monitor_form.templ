@@ -10,6 +10,7 @@ type MonitorFormData struct {
 	Monitor *domain.Monitor
 	IsEdit  bool
 	Errors  map[string]string
+	User    *domain.User
 }
 
 // MonitorFormModal renders a <dialog> that can be embedded in any page.
@@ -160,14 +161,14 @@ templ MonitorFormModal() {
 // It wraps the modal in a Layout and auto-opens it.
 templ MonitorForm(data MonitorFormData) {
 	if data.IsEdit {
-		@Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name)) {
+		@Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name), data.User) {
 			@MonitorFormModal()
 			<script>
 				openEditMonitorModal({ fmt.Sprintf("%q", data.Monitor.ID) });
 			</script>
 		}
 	} else {
-		@Layout("Add Monitor") {
+		@Layout("Add Monitor", data.User) {
 			@MonitorFormModal()
 			<script>openNewMonitorModal();</script>
 		}

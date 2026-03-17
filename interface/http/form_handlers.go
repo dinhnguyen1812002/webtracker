@@ -32,6 +32,7 @@ func (h *FormHandler) NewMonitorForm(c *gin.Context) {
 		Monitor: nil,
 		IsEdit:  false,
 		Errors:  make(map[string]string),
+		User:    GetUserFromContext(c),
 	}
 
 	component := templates.MonitorForm(data)
@@ -65,6 +66,7 @@ func (h *FormHandler) EditMonitorForm(c *gin.Context) {
 		Monitor: monitor,
 		IsEdit:  true,
 		Errors:  make(map[string]string),
+		User:    GetUserFromContext(c),
 	}
 
 	component := templates.MonitorForm(data)
@@ -95,6 +97,7 @@ func (h *FormHandler) CreateMonitorForm(c *gin.Context) {
 			},
 			IsEdit: false,
 			Errors: errors,
+			User:   GetUserFromContext(c),
 		}
 
 		component := templates.MonitorForm(data)
@@ -123,6 +126,7 @@ func (h *FormHandler) CreateMonitorForm(c *gin.Context) {
 			Errors: map[string]string{
 				"general": err.Error(),
 			},
+			User: GetUserFromContext(c),
 		}
 
 		component := templates.MonitorForm(data)
@@ -184,6 +188,7 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 			},
 			IsEdit: true,
 			Errors: errors,
+			User:   GetUserFromContext(c),
 		}
 
 		component := templates.MonitorForm(data)
@@ -224,6 +229,7 @@ func (h *FormHandler) UpdateMonitorForm(c *gin.Context) {
 			Errors: map[string]string{
 				"general": err.Error(),
 			},
+			User: GetUserFromContext(c),
 		}
 
 		component := templates.MonitorForm(data)

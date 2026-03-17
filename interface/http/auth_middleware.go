@@ -21,6 +21,35 @@ func NewAuthMiddleware(authService *usecase.AuthService) *AuthMiddleware {
 	}
 }
 
+// LoadUser is a Gin middleware that loads the user into context if a valid
+// session cookie is present. It does not enforce authentication.
+func (m *AuthMiddleware) LoadUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if m == nil || m.authService == nil {
+			c.Next()
+			return
+		}
+
+		sessionID, err := c.Cookie("session_id")
+		if err != nil || sessionID == "" {
+			c.Next()
+			return
+		}
+
+		user, session, err := m.authService.ValidateSession(c.Request.Context(), sessionID)
+		if err != nil || user == nil {
+			// Clear invalid session cookie to avoid repeated lookups
+			c.SetCookie("session_id", "", -1, "/", "", false, true)
+			c.Next()
+			return
+		}
+
+		c.Set("user", user)
+		c.Set("session", session)
+		c.Next()
+	}
+}
+
 // RequireAuth is a Gin middleware that enforces authentication.
 // It reads the session_id cookie, validates the session, and loads the user
 // into the Gin context. If the session is invalid, it redirects to /login.

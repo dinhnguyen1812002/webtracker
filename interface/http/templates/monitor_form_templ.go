@@ -18,6 +18,7 @@ type MonitorFormData struct {
 	Monitor *domain.Monitor
 	IsEdit  bool
 	Errors  map[string]string
+	User    *domain.User
 }
 
 // MonitorFormModal renders a <dialog> that can be embedded in any page.
@@ -97,7 +98,7 @@ func MonitorForm(data MonitorFormData) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name), data.User).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -124,7 +125,7 @@ func MonitorForm(data MonitorFormData) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = Layout("Add Monitor").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = Layout("Add Monitor", data.User).Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

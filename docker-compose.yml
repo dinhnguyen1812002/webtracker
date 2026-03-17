@@ -9,7 +9,6 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/migrations:/docker-entrypoint-initdb.d
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     networks:
@@ -51,9 +50,7 @@ services:
       start_period: 5s
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME}/webtracker:${IMAGE_TAG:-latest}
     container_name: uptime-monitor-app
     environment:
       PORT: ${PORT:-8080}
@@ -83,7 +80,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "/main", "-health-check"]
       interval: 30s
       timeout: 10s
       retries: 3
