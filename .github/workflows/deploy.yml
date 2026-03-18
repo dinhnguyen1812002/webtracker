@@ -88,7 +88,7 @@ jobs:
 
             echo ">>> Deploying: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
 
-            cd /home/dev/app || { echo "FAIL: directory not found"; exit 1; }
+            cd /home/webtracker || { echo "FAIL: directory not found"; exit 1; }
 
             # Đảm bảo .env tồn tại
             [ -f .env ] || { echo "FAIL: .env file not found"; exit 1; }
@@ -97,11 +97,11 @@ jobs:
             [ -f .current_tag ] && cp .current_tag .previous_tag
             echo "$IMAGE_TAG" > .current_tag
 
-            # Pull image mới
-            docker compose pull app || { echo "FAIL: docker compose pull"; exit 1; }
+            # Pull images cho toàn bộ services
+            docker compose pull || { echo "FAIL: docker compose pull"; exit 1; }
 
-            # Khởi động lại chỉ app container (postgres & redis giữ nguyên)
-            docker compose up -d --no-deps app || { echo "FAIL: docker compose up"; exit 1; }
+            # Khởi động toàn bộ (postgres, redis chạy trước, sau đó đến app)
+            docker compose up -d || { echo "FAIL: docker compose up"; exit 1; }
 
             # Kiểm tra health với vòng lặp chờ
             echo ">>> Waiting for app to become healthy..."
