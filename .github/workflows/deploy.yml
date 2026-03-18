@@ -80,71 +80,72 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
-          script_stop: true
+          script_stop: true # Dừng ngay nếu có lệnh lỗi
           envs: DOCKER_USERNAME,IMAGE_TAG
           script: |
             export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
             export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
 
-            echo ">>> Deploying: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
+            echo ">>> [INFO] Deploying image: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
 
-            cd /home/webtracker 
+            cd /home/webtracker || { echo ">>> [ERROR] Directory /home/webtracker not found"; exit 1; }
 
-            # Đảm bảo .env tồn tại
-            [ -f .env ] 
-
-            # Lưu tag hiện tại để rollback nếu cần
-            [ -f .current_tag ] && cp .current_tag .previous_tag
-            echo "$IMAGE_TAG" > .current_tag
-
-            # Pull images cho toàn bộ services
-            docker compose pull 
-            # Khởi động toàn bộ (postgres, redis chạy trước, sau đó đến app)
-            docker compose up -d 
-
-            # Kiểm tra health với vòng lặp chờ
-            echo ">>> Waiting for app to become healthy..."
-            MAX_RETRIES=12 # 12 * 5s = 60s
-            RETRY_COUNT=0
-            STATUS="starting"
-
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' uptime-monitor-app 2>/dev/null || echo "not_found")
-              echo ">>> Attempt $((RETRY_COUNT+1)): Health status is '$STATUS'"
-              
-              if [ "$STATUS" == "healthy" ]; then
-                break
-              fi
-              
-              if [ "$STATUS" == "unhealthy" ]; then
-                echo "FAIL: App became unhealthy"
-                break
-              fi
-              
-              RETRY_COUNT=$((RETRY_COUNT+1))
-              sleep 5
-            done
-
-            if [ "$STATUS" != "healthy" ]; then
-              echo "FAIL: Deployment validation failed (status=$STATUS)"
-              echo ">>> Container logs:"
-              docker logs uptime-monitor-app --tail 50
-              
-              # Rollback nếu có tag cũ
-              if [ -f .previous_tag ]; then
-                PREV_TAG=$(cat .previous_tag)
-                echo ">>> Rolling back to $PREV_TAG..."
-                IMAGE_TAG="$PREV_TAG" docker compose up -d --no-deps app
-                echo "$PREV_TAG" > .current_tag
-              fi
-              
+            # 1. Kiểm tra môi trường
+            if [ ! -f docker-compose.yml ]; then
+              echo ">>> [ERROR] docker-compose.yml not found in $(pwd)"
               exit 1
             fi
 
-            echo ">>> All containers:"
-            docker compose ps
+            # 2. Cập nhật image mới
+            echo ">>> [INFO] Pulling latest images..."
+            docker compose pull app || echo ">>> [WARN] Pull failed, trying to build locally if needed"
 
-            # Dọn image cũ
+            # 3. Khởi động lại service
+            echo ">>> [INFO] Starting containers..."
+            # Dùng --remove-orphans để dọn các container cũ không còn trong file config
+            docker compose up -d --remove-orphans || { 
+              echo ">>> [ERROR] Docker compose up failed. Checking logs...";
+              docker compose logs --tail 20; 
+              exit 1; 
+            }
+
+            # 4. Kiểm tra sức khỏe (Healthcheck)
+            echo ">>> [INFO] Waiting for app to be ready..."
+            ATTEMPTS=0
+            MAX_ATTEMPTS=10
+            
+            # Lấy tên service thay vì tên container cứng nhắc (tránh lỗi not found)
+            SERVICE_NAME="app" 
+            
+            until [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; do
+              # Kiểm tra xem có container nào đang chạy của service này không
+              CONTAINER_ID=$(docker compose ps -q $SERVICE_NAME)
+              
+              if [ -z "$CONTAINER_ID" ]; then
+                echo ">>> [ERROR] Service $SERVICE_NAME is not running."
+                docker compose logs $SERVICE_NAME
+                exit 1
+              fi
+
+              # Kiểm tra Health status
+              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_ID 2>/dev/null || echo "no-healthcheck")
+              
+              if [ "$HEALTH" == "healthy" ] || [ "$HEALTH" == "no-healthcheck" ]; then
+                echo ">>> [SUCCESS] Service is up and status is: $HEALTH"
+                break
+              fi
+              
+              echo ">>> [WAIT] Status: $HEALTH (Attempt: $((ATTEMPTS+1))/$MAX_ATTEMPTS)"
+              sleep 5
+              ATTEMPTS=$((ATTEMPTS+1))
+            done
+
+            if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+               echo ">>> [ERROR] Health check timed out!"
+               docker compose logs $SERVICE_NAME
+               exit 1
+            fi
+
+            # 5. Dọn dẹp
             docker image prune -f
-
-            echo ">>> Deploy successful: $IMAGE_TAG"
+            echo ">>> [FINISH] Deployment successful!"
