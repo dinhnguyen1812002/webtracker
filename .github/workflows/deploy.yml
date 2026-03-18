@@ -88,20 +88,19 @@ jobs:
 
             echo ">>> Deploying: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
 
-            cd /home/webtracker || { echo "FAIL: directory not found"; exit 1; }
+            cd /home/webtracker 
 
             # Đảm bảo .env tồn tại
-            [ -f .env ] || { echo "FAIL: .env file not found"; exit 1; }
+            [ -f .env ] 
 
             # Lưu tag hiện tại để rollback nếu cần
             [ -f .current_tag ] && cp .current_tag .previous_tag
             echo "$IMAGE_TAG" > .current_tag
 
             # Pull images cho toàn bộ services
-            docker compose pull || { echo "FAIL: docker compose pull"; exit 1; }
-
+            docker compose pull 
             # Khởi động toàn bộ (postgres, redis chạy trước, sau đó đến app)
-            docker compose up -d || { echo "FAIL: docker compose up"; exit 1; }
+            docker compose up -d 
 
             # Kiểm tra health với vòng lặp chờ
             echo ">>> Waiting for app to become healthy..."
