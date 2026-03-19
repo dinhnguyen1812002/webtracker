@@ -94,10 +94,11 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script_stop: true # Dừng ngay nếu có lệnh lỗi
-          envs: DOCKER_USERNAME,IMAGE_TAG
+          envs: DOCKER_USERNAME,IMAGE_TAG,APP_SERVICE_NAME
           script: |
             export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
             export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+            export APP_SERVICE_NAME="${{ vars.APP_SERVICE_NAME }}"
 
             echo ">>> [INFO] Deploying image: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
 
@@ -117,23 +118,10 @@ jobs:
 
             echo ">>> [INFO] Using compose args: $COMPOSE_ARGS"
 
-            SERVICE_NAME=$(
-              docker compose $COMPOSE_ARGS config --services | while read -r service; do
-                IMAGE_LINE=$(docker compose $COMPOSE_ARGS config | awk -v svc="$service" '
-                  $1 == svc ":" { in_service=1; next }
-                  in_service && /^[^[:space:]]/ { exit }
-                  in_service && $1 == "image:" { print $2; exit }
-                ')
+            SERVICE_NAME="${APP_SERVICE_NAME:-app}"
 
-                if echo "$IMAGE_LINE" | grep -q "/webtracker:"; then
-                  echo "$service"
-                  break
-                fi
-              done
-            )
-
-            if [ -z "$SERVICE_NAME" ]; then
-              echo ">>> [ERROR] Could not detect app service from compose config"
+            if ! docker compose $COMPOSE_ARGS config --services | grep -qx "$SERVICE_NAME"; then
+              echo ">>> [ERROR] Service $SERVICE_NAME not found in compose config"
               docker compose $COMPOSE_ARGS config --services
               exit 1
             fi
