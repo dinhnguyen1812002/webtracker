@@ -117,9 +117,32 @@ jobs:
 
             echo ">>> [INFO] Using compose args: $COMPOSE_ARGS"
 
+            SERVICE_NAME=$(
+              docker compose $COMPOSE_ARGS config --services | while read -r service; do
+                IMAGE_LINE=$(docker compose $COMPOSE_ARGS config | awk -v svc="$service" '
+                  $1 == svc ":" { in_service=1; next }
+                  in_service && /^[^[:space:]]/ { exit }
+                  in_service && $1 == "image:" { print $2; exit }
+                ')
+
+                if echo "$IMAGE_LINE" | grep -q "/webtracker:"; then
+                  echo "$service"
+                  break
+                fi
+              done
+            )
+
+            if [ -z "$SERVICE_NAME" ]; then
+              echo ">>> [ERROR] Could not detect app service from compose config"
+              docker compose $COMPOSE_ARGS config --services
+              exit 1
+            fi
+
+            echo ">>> [INFO] Detected app service: $SERVICE_NAME"
+
             # 2. Cập nhật image mới
             echo ">>> [INFO] Pulling latest images..."
-            docker compose $COMPOSE_ARGS pull app || echo ">>> [WARN] Pull failed, trying to continue with local image if available"
+            docker compose $COMPOSE_ARGS pull "$SERVICE_NAME" || echo ">>> [WARN] Pull failed, trying to continue with local image if available"
 
             # 3. Khởi động lại service
             echo ">>> [INFO] Starting containers..."
@@ -134,10 +157,7 @@ jobs:
             echo ">>> [INFO] Waiting for app to be ready..."
             ATTEMPTS=0
             MAX_ATTEMPTS=10
-            
-            # Lấy tên service thay vì tên container cứng nhắc (tránh lỗi not found)
-            SERVICE_NAME="app" 
-            
+
             until [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; do
               # Kiểm tra xem có container nào đang chạy của service này không
               CONTAINER_ID=$(docker compose $COMPOSE_ARGS ps -q $SERVICE_NAME)
