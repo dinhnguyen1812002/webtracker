@@ -246,7 +246,7 @@ curl http://localhost:8080/metrics
 
 ```bash
 # View application logs
-docker-compose logs -f app
+docker-compose logs -f uptime-monitor-app
 
 # View database logs
 docker-compose logs -f postgres

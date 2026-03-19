@@ -54,15 +54,15 @@ docker-build:
 
 # Run with Docker Compose (development)
 docker-run:
-	docker-compose up -d
+	docker compose up -d
 
 # Run with Docker Compose (production)
 docker-run-prod:
-	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Stop Docker Compose
 docker-stop:
-	docker-compose down
+	docker compose down
 
 # Build migration tool
 migrate-tool:
@@ -98,15 +98,15 @@ verify:
 
 # Database operations
 db-start:
-	docker-compose up -d postgres redis
+	docker compose up -d postgres redis
 
 db-stop:
-	docker-compose stop postgres redis
+	docker compose stop postgres redis
 
 db-reset: db-stop
-	docker-compose rm -f postgres redis
+	docker compose rm -f postgres redis
 	docker volume rm uptime-monitor_postgres_data uptime-monitor_redis_data || true
-	docker-compose up -d postgres redis
+	docker compose up -d postgres redis
 	sleep 5
 	$(MAKE) migrate-up
 

@@ -100,10 +100,6 @@ jobs:
             export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
             export APP_SERVICE_NAME="${{ vars.APP_SERVICE_NAME }}"
 
-            echo ">>> [INFO] Deploying image: $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
-
-            cd /home/webtracker || { echo ">>> [ERROR] Directory /home/webtracker not found"; exit 1; }
-
             # 1. Xác định bộ file compose có trên server
             if [ -f docker-compose.yml ] && [ -f docker-compose.prod.yml ]; then
               COMPOSE_ARGS="-f docker-compose.yml -f docker-compose.prod.yml"

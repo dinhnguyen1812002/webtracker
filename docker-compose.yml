@@ -50,7 +50,7 @@ services:
       start_period: 5s
 
   uptime-monitor-app:
-    image: ${DOCKER_USERNAME}/webtracker:${IMAGE_TAG:-latest}
+    image: dinhnguyen1812002/webtracker:latest
     container_name: uptime-monitor-app
     environment:
       PORT: ${PORT:-8080}
