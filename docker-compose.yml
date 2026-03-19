@@ -54,6 +54,12 @@ services:
     container_name: uptime-monitor-app
     environment:
       PORT: ${PORT:-8080}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: uptime_monitor
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_SSL_MODE: disable
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-8}
       LOG_LEVEL: ${LOG_LEVEL:-info}

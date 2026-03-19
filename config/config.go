@@ -240,6 +240,8 @@ func LoadFromEnv() *Config {
 	}
 	if password := os.Getenv("DB_PASSWORD"); password != "" {
 		config.Database.Password = password
+	} else if password := os.Getenv("POSTGRES_PASSWORD"); password != "" {
+		config.Database.Password = password
 	}
 	if sslMode := os.Getenv("DB_SSL_MODE"); sslMode != "" {
 		config.Database.SSLMode = sslMode

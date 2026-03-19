@@ -112,7 +112,7 @@ func mergeConfigsSelectively(fileConfig, envConfig *Config) {
 	if os.Getenv("DB_USER") != "" {
 		fileConfig.Database.User = envConfig.Database.User
 	}
-	if os.Getenv("DB_PASSWORD") != "" {
+	if os.Getenv("DB_PASSWORD") != "" || os.Getenv("POSTGRES_PASSWORD") != "" {
 		fileConfig.Database.Password = envConfig.Database.Password
 	}
 	if os.Getenv("DB_SSL_MODE") != "" {
