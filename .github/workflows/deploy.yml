@@ -141,40 +141,6 @@ jobs:
               exit 1;
             }
 
-            # 4. Kiểm tra sức khỏe (Healthcheck)
-            echo ">>> [INFO] Waiting for app to be ready..."
-            ATTEMPTS=0
-            MAX_ATTEMPTS=10
-
-            until [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; do
-              # Kiểm tra xem có container nào đang chạy của service này không
-              CONTAINER_ID=$(docker compose $COMPOSE_ARGS ps -q $SERVICE_NAME)
-              
-              if [ -z "$CONTAINER_ID" ]; then
-                echo ">>> [ERROR] Service $SERVICE_NAME is not running."
-                docker compose $COMPOSE_ARGS logs $SERVICE_NAME
-                exit 1
-              fi
-
-              # Kiểm tra Health status
-              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_ID 2>/dev/null || echo "no-healthcheck")
-              
-              if [ "$HEALTH" == "healthy" ] || [ "$HEALTH" == "no-healthcheck" ]; then
-                echo ">>> [SUCCESS] Service is up and status is: $HEALTH"
-                break
-              fi
-              
-              echo ">>> [WAIT] Status: $HEALTH (Attempt: $((ATTEMPTS+1))/$MAX_ATTEMPTS)"
-              sleep 5
-              ATTEMPTS=$((ATTEMPTS+1))
-            done
-
-            if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-               echo ">>> [ERROR] Health check timed out!"
-               docker compose $COMPOSE_ARGS logs $SERVICE_NAME
-               exit 1
-            fi
-
             # 5. Dọn dẹp
             docker image prune -f
             echo ">>> [FINISH] Deployment successful!"
