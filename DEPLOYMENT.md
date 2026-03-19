@@ -51,7 +51,7 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 docker-compose ps
 
 # View logs
-docker-compose logs app
+docker-compose logs uptime-monitor-app
 
 # Access the application
 curl http://localhost:8080/health

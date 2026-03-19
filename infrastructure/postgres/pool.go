@@ -61,13 +61,12 @@ func NewPool(ctx context.Context, config PoolConfig) (*pgxpool.Pool, error) {
 	}
 
 	connString := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%d user=%s password=%s dbname=%s",
 		config.Host,
 		config.Port,
 		config.User,
 		config.Password,
 		config.Database,
-		sslMode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(connString)

@@ -41,7 +41,7 @@ services:
       retries: 5
       start_period: 5s
 
-  app:
+  uptime-monitor-app:
     image: dinhnguyen1812002/webtracker:latest
     container_name: uptime-monitor-app
     environment:
@@ -73,5 +73,4 @@ volumes:
 networks:
   uptime-monitor:
     driver: bridge
-
 

@@ -96,6 +96,7 @@ func main() {
 	poolConfig.Database = cfg.Database.Database
 	poolConfig.User = cfg.Database.User
 	poolConfig.Password = cfg.Database.Password
+	poolConfig.SSLMode = cfg.Database.SSLMode
 	// Apply memory-optimized connection pool settings
 	poolConfig.MaxConns = int32(cfg.Database.MaxConnections)
 	poolConfig.MinConns = int32(cfg.Database.MinConnections)

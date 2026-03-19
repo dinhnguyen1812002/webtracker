@@ -76,7 +76,7 @@ docker-compose up -d
 docker-compose ps
 
 # View logs
-docker-compose logs -f app
+docker-compose logs -f uptime-monitor-app
 ```
 
 ### 4. Verify Installation
@@ -462,7 +462,7 @@ sudo systemctl status uptime-monitor
 3. **Log Monitoring:**
    ```bash
    # Docker logs
-   docker-compose logs -f app
+   docker-compose logs -f uptime-monitor-app
    
    # Systemd logs
    journalctl -u uptime-monitor -f
@@ -486,7 +486,7 @@ sudo systemctl status uptime-monitor
 ./uptime-monitor -config config.yaml -health-check
 
 # Check logs
-docker-compose logs app
+docker-compose logs uptime-monitor-app
 ```
 
 **2. Database connection failed:**
@@ -520,13 +520,13 @@ curl http://localhost:8080/api/v1/monitors
 curl "https://api.telegram.org/bot<TOKEN>/getMe"
 
 # Check logs for delivery errors
-docker-compose logs app | grep -i alert
+docker-compose logs uptime-monitor-app | grep -i alert
 ```
 
 **5. High memory usage:**
 ```bash
 # Check memory stats in logs
-docker-compose logs app | grep -i memory
+docker-compose logs uptime-monitor-app | grep -i memory
 
 # Reduce worker pool size
 export WORKER_POOL_SIZE=5
@@ -571,7 +571,7 @@ redis:
 
 1. **Check logs first:**
    ```bash
-   docker-compose logs app --tail=100
+   docker-compose logs uptime-monitor-app --tail=100
    ```
 
 2. **Verify configuration:**
@@ -592,7 +592,7 @@ redis:
 4. **Enable debug logging:**
    ```bash
    export LOG_LEVEL=debug
-   docker-compose restart app
+   docker-compose restart uptime-monitor-app
    ```
 
 ## Next Steps

@@ -64,7 +64,7 @@ The application includes built-in memory profiling:
 
 ```bash
 # Check current memory usage in logs
-docker-compose logs app | grep -i memory
+docker-compose logs uptime-monitor-app | grep -i memory
 
 # Memory stats are logged at:
 # - Application startup
@@ -223,28 +223,28 @@ The application uses structured JSON logging with the following format:
 #### Health Check Logs
 ```bash
 # Filter health check logs
-docker-compose logs app | jq 'select(.msg | contains("Health check"))'
+docker-compose logs uptime-monitor-app | jq 'select(.msg | contains("Health check"))'
 
 # Monitor failed health checks
-docker-compose logs app | jq 'select(.status == "failure")'
+docker-compose logs uptime-monitor-app | jq 'select(.status == "failure")'
 ```
 
 #### Alert Delivery Logs
 ```bash
 # Filter alert delivery logs
-docker-compose logs app | jq 'select(.msg | contains("Alert"))'
+docker-compose logs uptime-monitor-app | jq 'select(.msg | contains("Alert"))'
 
 # Monitor failed alert deliveries
-docker-compose logs app | jq 'select(.msg | contains("Alert delivery failed"))'
+docker-compose logs uptime-monitor-app | jq 'select(.msg | contains("Alert delivery failed"))'
 ```
 
 #### Memory and Performance Logs
 ```bash
 # Monitor memory usage
-docker-compose logs app | jq 'select(.msg | contains("Memory"))'
+docker-compose logs uptime-monitor-app | jq 'select(.msg | contains("Memory"))'
 
 # Monitor worker pool stats
-docker-compose logs app | jq 'select(.msg | contains("Worker pool"))'
+docker-compose logs uptime-monitor-app | jq 'select(.msg | contains("Worker pool"))'
 ```
 
 ### Log Management
@@ -254,7 +254,7 @@ docker-compose logs app | jq 'select(.msg | contains("Worker pool"))'
 ```yaml
 # docker-compose.yml
 services:
-  app:
+  uptime-monitor-app:
     logging:
       driver: "json-file"
       options:
@@ -281,7 +281,7 @@ filebeat.inputs:
 **Centralized Logging:**
 ```bash
 # Ship logs to external system
-docker-compose logs app --no-color | \
+docker-compose logs uptime-monitor-app --no-color | \
   while read line; do
     curl -X POST https://logs.example.com/ingest \
       -H "Content-Type: application/json" \
@@ -423,7 +423,7 @@ environment:
 **Diagnosis:**
 ```bash
 # Check memory stats
-docker-compose logs app | grep -i memory | tail -10
+docker-compose logs uptime-monitor-app | grep -i memory | tail -10
 
 # Check for memory leaks
 curl http://localhost:8080/metrics | jq '.worker_pool'
@@ -433,14 +433,14 @@ curl http://localhost:8080/metrics | jq '.worker_pool'
 ```bash
 # Reduce worker pool size
 export WORKER_POOL_SIZE=5
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 
 # Disable Redis if not needed
 export REDIS_ENABLED=false
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 
 # Force garbage collection
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 ```
 
 #### 2. Queue Backup
@@ -463,13 +463,13 @@ curl http://localhost:8080/metrics | jq '.worker_pool.active_workers'
 ```bash
 # Increase worker pool size
 export WORKER_POOL_SIZE=15
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 
 # Reduce check frequency for some monitors
 # (via API or database update)
 
 # Check for stuck workers
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 ```
 
 #### 3. Database Connection Issues
@@ -485,7 +485,7 @@ docker-compose restart app
 docker-compose exec postgres pg_isready
 
 # Check connection pool
-docker-compose logs app | grep -i "database\|connection"
+docker-compose logs uptime-monitor-app | grep -i "database\|connection"
 
 # Check active connections
 docker-compose exec postgres psql -U postgres -c "
@@ -499,7 +499,7 @@ docker-compose restart postgres
 
 # Reduce connection pool size
 export DB_MAX_CONNECTIONS=10
-docker-compose restart app
+docker-compose restart uptime-monitor-app
 
 # Check database logs
 docker-compose logs postgres
@@ -515,7 +515,7 @@ docker-compose logs postgres
 **Diagnosis:**
 ```bash
 # Check alert delivery logs
-docker-compose logs app | grep -i alert | grep -i error
+docker-compose logs uptime-monitor-app | grep -i alert | grep -i error
 
 # Test alert channels manually
 curl -X POST https://api.telegram.org/bot<TOKEN>/getMe
@@ -546,16 +546,16 @@ curl -X POST <WEBHOOK_URL> -d '{"test": true}'
 openssl s_client -connect example.com:443 -servername example.com
 
 # Check SSL-related logs
-docker-compose logs app | grep -i ssl | grep -i error
+docker-compose logs uptime-monitor-app | grep -i ssl | grep -i error
 ```
 
 **Solutions:**
 ```bash
 # Update CA certificates
-docker-compose build --no-cache app
+docker-compose build --no-cache uptime-monitor-app
 
 # Check system time
-docker-compose exec app date
+docker-compose exec uptime-monitor-app date
 
 # Verify certificate chain
 curl -vI https://example.com
@@ -567,13 +567,13 @@ curl -vI https://example.com
 
 ```bash
 # Real-time log monitoring
-docker-compose logs -f app | jq -r '"\(.timestamp) [\(.severity)] \(.msg)"'
+docker-compose logs -f uptime-monitor-app | jq -r '"\(.timestamp) [\(.severity)] \(.msg)"'
 
 # Error analysis
-docker-compose logs app | jq 'select(.severity == "error")' | jq -r '.msg' | sort | uniq -c
+docker-compose logs uptime-monitor-app | jq 'select(.severity == "error")' | jq -r '.msg' | sort | uniq -c
 
 # Performance analysis
-docker-compose logs app | jq 'select(.response_time_ms > 5000)' | jq '.monitor_id' | sort | uniq -c
+docker-compose logs uptime-monitor-app | jq 'select(.response_time_ms > 5000)' | jq '.monitor_id' | sort | uniq -c
 ```
 
 #### Database Debugging
@@ -619,12 +619,12 @@ curl http://localhost:8080/health/ready
 
 2. **Monitor memory usage:**
 ```bash
-docker-compose logs app | grep -i memory | tail -5
+docker-compose logs uptime-monitor-app | grep -i memory | tail -5
 ```
 
 3. **Check error rates:**
 ```bash
-docker-compose logs app --since 24h | jq 'select(.severity == "error")' | wc -l
+docker-compose logs uptime-monitor-app --since 24h | jq 'select(.severity == "error")' | wc -l
 ```
 
 #### Weekly Tasks
@@ -652,8 +652,8 @@ VACUUM ANALYZE;
 2. **Log rotation:**
 ```bash
 # Rotate Docker logs
-docker-compose logs app --no-color > /var/log/uptime-monitor-$(date +%Y%m%d).log
-docker-compose restart app
+docker-compose logs uptime-monitor-app --no-color > /var/log/uptime-monitor-$(date +%Y%m%d).log
+docker-compose restart uptime-monitor-app
 ```
 
 3. **Performance review:**
@@ -727,13 +727,13 @@ docker-compose exec postgres pg_dump -U postgres uptime_monitor > backup.sql
 2. **Update application:**
 ```bash
 # Pull latest image
-docker-compose pull app
+docker-compose pull uptime-monitor-app
 
 # Stop application
-docker-compose stop app
+docker-compose stop uptime-monitor-app
 
 # Start with new image
-docker-compose up -d app
+docker-compose up -d uptime-monitor-app
 ```
 
 3. **Verify update:**
@@ -742,7 +742,7 @@ docker-compose up -d app
 curl http://localhost:8080/health/ready
 
 # Check logs
-docker-compose logs app --tail 50
+docker-compose logs uptime-monitor-app --tail 50
 ```
 
 #### Database Migrations
@@ -751,7 +751,7 @@ Migrations run automatically on startup, but for manual control:
 
 ```bash
 # Run migrations manually
-docker-compose exec app /main -migrate
+docker-compose exec uptime-monitor-app /main -migrate
 
 # Check migration status
 docker-compose exec postgres psql -U postgres -d uptime_monitor -c "
@@ -766,7 +766,7 @@ SELECT * FROM schema_migrations ORDER BY version;"
 ```yaml
 # docker-compose.yml
 services:
-  app:
+  uptime-monitor-app:
     deploy:
       resources:
         limits:
@@ -780,7 +780,7 @@ services:
 #### Medium Deployment (50-100 monitors)
 ```yaml
 services:
-  app:
+  uptime-monitor-app:
     deploy:
       resources:
         limits:
@@ -794,7 +794,7 @@ services:
 #### Large Deployment (100+ monitors)
 ```yaml
 services:
-  app:
+  uptime-monitor-app:
     deploy:
       resources:
         limits:
@@ -812,7 +812,7 @@ For very large deployments, consider:
 1. **Multiple application instances:**
 ```yaml
 services:
-  app:
+  uptime-monitor-app:
     deploy:
       replicas: 3
     environment:
@@ -904,7 +904,7 @@ services:
 2. **Secrets management:**
 ```yaml
 services:
-  app:
+  uptime-monitor-app:
     secrets:
       - db_password
       - telegram_token
@@ -965,13 +965,13 @@ gunzip -c backup_20240101_120000.sql.gz | docker-compose exec -T postgres psql -
 1. **Restore database:**
 ```bash
 # Stop application
-docker-compose stop app
+docker-compose stop uptime-monitor-app
 
 # Restore database
 gunzip -c backup_latest.sql.gz | docker-compose exec -T postgres psql -U postgres uptime_monitor
 
 # Start application
-docker-compose start app
+docker-compose start uptime-monitor-app
 ```
 
 2. **Verify recovery:**

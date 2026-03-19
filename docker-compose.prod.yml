@@ -50,7 +50,7 @@ services:
       retries: 5
       start_period: 5s
 
-  app:
+  uptime-monitor-app:
     image: dinhnguyen1812002/webtracker:${IMAGE_TAG:-latest}  # dùng image từ Docker Hub thay vì build local
   
     container_name: uptime-monitor-app

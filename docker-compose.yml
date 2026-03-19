@@ -49,7 +49,7 @@ services:
       retries: 5
       start_period: 5s
 
-  app:
+  uptime-monitor-app:
     image: ${DOCKER_USERNAME}/webtracker:${IMAGE_TAG:-latest}
     container_name: uptime-monitor-app
     environment:
