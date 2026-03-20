@@ -93,50 +93,15 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
-          script_stop: true # Dừng ngay nếu có lệnh lỗi
-          envs: DOCKER_USERNAME,IMAGE_TAG,APP_SERVICE_NAME
+          script_stop: true
           script: |
             export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
             export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
-            export APP_SERVICE_NAME="${{ vars.APP_SERVICE_NAME }}"
 
-            # 1. Xác định bộ file compose có trên server
-            if [ -f docker-compose.yml ] && [ -f docker-compose.prod.yml ]; then
-              COMPOSE_ARGS="-f docker-compose.yml -f docker-compose.prod.yml"
-            elif [ -f docker-compose.prod.yml ]; then
-              COMPOSE_ARGS="-f docker-compose.prod.yml"
-            elif [ -f docker-compose.yml ]; then
-              COMPOSE_ARGS="-f docker-compose.yml"
-            else
-              echo ">>> [ERROR] No docker compose file found in $(pwd)"
-              exit 1
-            fi
+            cd /home/webtracker
 
-            echo ">>> [INFO] Using compose args: $COMPOSE_ARGS"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --force-recreate webtracker
 
-            SERVICE_NAME="${APP_SERVICE_NAME:-app}"
-
-            if ! docker compose $COMPOSE_ARGS config --services | grep -qx "$SERVICE_NAME"; then
-              echo ">>> [ERROR] Service $SERVICE_NAME not found in compose config"
-              docker compose $COMPOSE_ARGS config --services
-              exit 1
-            fi
-
-            echo ">>> [INFO] Detected app service: $SERVICE_NAME"
-
-            # 2. Cập nhật image mới
-            echo ">>> [INFO] Pulling latest images..."
-            docker compose $COMPOSE_ARGS pull "$SERVICE_NAME" || echo ">>> [WARN] Pull failed, trying to continue with local image if available"
-
-            # 3. Khởi động lại service
-            echo ">>> [INFO] Starting containers..."
-            # Dùng --remove-orphans để dọn các container cũ không còn trong file config
-            docker compose $COMPOSE_ARGS up -d --remove-orphans || {
-              echo ">>> [ERROR] Docker compose up failed. Checking logs...";
-              docker compose $COMPOSE_ARGS logs --tail 20;
-              exit 1;
-            }
-
-            # 5. Dọn dẹp
-            docker image prune -f
-            echo ">>> [FINISH] Deployment successful!"
+            sleep 5
+            curl -f http://localhost:8080/health || exit 1
