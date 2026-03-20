@@ -27,10 +27,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # - name: Run tests
-      #   run: go test -v -race ./...
-      #   env:
-      #     REDIS_ADDR: 127.0.0.1:6379
+      - name: Run tests
+        run: go test -v -race ./...
+        env:
+          REDIS_ADDR: 127.0.0.1:6379
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -67,16 +67,6 @@ jobs:
     needs: build-and-push
 
     steps:
-      - name: Upload compose files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          source: "docker-compose.yml,docker-compose.prod.yml"
-          target: /home/webtracker
-
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -86,12 +76,7 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT }}
           script_stop: true
           script: |
-            export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
-            export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
-
             cd /home/webtracker
-
-            echo "Deploying $DOCKER_USERNAME/webtracker:$IMAGE_TAG"
 
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --force-recreate uptime-monitor-app
