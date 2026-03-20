@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -82,18 +81,11 @@ func (m *mockRedisClient) Delete(ctx context.Context, key string) error {
 
 // TestExecuteCheck_Success tests successful health check execution
 func TestExecuteCheck_Success(t *testing.T) {
-	// Create test HTTP server that returns 200 OK
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-	defer server.Close()
-
 	// Setup
 	monitor := &domain.Monitor{
 		ID:            "test-monitor-1",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -101,7 +93,9 @@ func TestExecuteCheck_Success(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, "OK"), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	// Execute
@@ -166,16 +160,10 @@ func TestExecuteCheck_StatusCodeClassification(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create test server with specific status code
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tc.statusCode)
-			}))
-			defer server.Close()
-
 			monitor := &domain.Monitor{
 				ID:            "test-monitor",
 				Name:          "Test Monitor",
-				URL:           server.URL,
+				URL:           "http://example.com",
 				CheckInterval: domain.CheckInterval1Min,
 				Enabled:       true,
 			}
@@ -183,7 +171,9 @@ func TestExecuteCheck_StatusCodeClassification(t *testing.T) {
 			monitorRepo := &mockMonitorRepo{monitor: monitor}
 			healthCheckRepo := &mockHealthCheckRepo{}
 			redisClient := &mockRedisClient{}
-			httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+			httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+				return newStubResponse(tc.statusCode, ""), nil
+			})
 			service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 			ctx := context.Background()
@@ -207,17 +197,10 @@ func TestExecuteCheck_StatusCodeClassification(t *testing.T) {
 // TestExecuteCheck_Timeout tests timeout handling
 // Requirement 1.5: 30-second timeout
 func TestExecuteCheck_Timeout(t *testing.T) {
-	// Create test server that delays response beyond timeout
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(35 * time.Second) // Longer than 30s timeout
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -225,8 +208,10 @@ func TestExecuteCheck_Timeout(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(newDelayedResponse(http.StatusOK, 200*time.Millisecond))
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
+	service.SetRequestTimeout(50 * time.Millisecond)
+	service.SetRetryConfig(httpclient.RetryConfig{MaxAttempts: 1, InitialDelay: 10 * time.Millisecond})
 
 	ctx := context.Background()
 	result, err := service.ExecuteCheck(ctx, monitor.ID)
@@ -250,7 +235,7 @@ func TestExecuteCheck_NetworkError(t *testing.T) {
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           "http://invalid-host-that-does-not-exist-12345.com",
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -258,8 +243,11 @@ func TestExecuteCheck_NetworkError(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("simulated network error")
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
+	service.SetRetryConfig(httpclient.RetryConfig{MaxAttempts: 1, InitialDelay: 10 * time.Millisecond})
 
 	ctx := context.Background()
 	result, err := service.ExecuteCheck(ctx, monitor.ID)
@@ -280,18 +268,11 @@ func TestExecuteCheck_NetworkError(t *testing.T) {
 // TestExecuteCheck_ResponseTimeRecording tests response time measurement
 // Requirement 1.4: Measure and record response time
 func TestExecuteCheck_ResponseTimeRecording(t *testing.T) {
-	// Create test server with artificial delay
 	delay := 100 * time.Millisecond
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(delay)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -299,7 +280,7 @@ func TestExecuteCheck_ResponseTimeRecording(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(newDelayedResponse(http.StatusOK, delay))
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	ctx := context.Background()
@@ -381,17 +362,10 @@ func TestGetCheckHistory(t *testing.T) {
 // TestExecuteCheck_HTTPS_ValidSSL tests SSL certificate extraction for valid HTTPS
 // Requirement 2.1: Extract and validate SSL certificate
 func TestExecuteCheck_HTTPS_ValidSSL(t *testing.T) {
-	// Create HTTPS test server with valid certificate
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "https://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -400,8 +374,9 @@ func TestExecuteCheck_HTTPS_ValidSSL(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 
-	// Wrap the test server's client (which trusts the test certificate)
-	httpClient := httpclient.NewClientFromHTTPClient(server.Client())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newTLSResponse(http.StatusOK, true), nil
+	})
 
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
@@ -438,16 +413,10 @@ func TestExecuteCheck_HTTPS_ValidSSL(t *testing.T) {
 // TestExecuteCheck_HTTPS_InvalidSSL tests handling of invalid SSL certificates
 // Requirement 2.6: Invalid SSL certificate = failed health check
 func TestExecuteCheck_HTTPS_InvalidSSL(t *testing.T) {
-	// Create HTTPS test server
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "https://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -456,9 +425,11 @@ func TestExecuteCheck_HTTPS_InvalidSSL(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 
-	// Use default client that will reject self-signed certificate
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("tls: failed to verify certificate")
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
+	service.SetRetryConfig(httpclient.RetryConfig{MaxAttempts: 1, InitialDelay: 10 * time.Millisecond})
 
 	ctx := context.Background()
 	result, err := service.ExecuteCheck(ctx, monitor.ID)
@@ -533,16 +504,10 @@ func TestCalculateSSLDaysUntilExpiry(t *testing.T) {
 // TestExecuteCheck_Persistence tests that health checks are persisted to database
 // Requirement 14.1: Persist health check results
 func TestExecuteCheck_Persistence(t *testing.T) {
-	// Create test HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -550,7 +515,9 @@ func TestExecuteCheck_Persistence(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	ctx := context.Background()
@@ -582,16 +549,10 @@ func TestExecuteCheck_Persistence(t *testing.T) {
 // TestExecuteCheck_MetricsCacheInvalidation tests that metrics cache is invalidated
 // Requirement 14.1: Update metrics cache in Redis
 func TestExecuteCheck_MetricsCacheInvalidation(t *testing.T) {
-	// Create test HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor-123",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -599,7 +560,9 @@ func TestExecuteCheck_MetricsCacheInvalidation(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	ctx := context.Background()
@@ -641,16 +604,10 @@ func TestExecuteCheck_MetricsCacheInvalidation(t *testing.T) {
 // TestExecuteCheck_PersistenceError tests handling of database persistence errors
 // Requirement 14.1: Handle persistence errors
 func TestExecuteCheck_PersistenceError(t *testing.T) {
-	// Create test HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -658,7 +615,9 @@ func TestExecuteCheck_PersistenceError(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{err: errors.New("database error")}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	ctx := context.Background()
@@ -678,16 +637,10 @@ func TestExecuteCheck_PersistenceError(t *testing.T) {
 // TestExecuteCheck_FailedCheckPersistence tests that failed checks are also persisted
 // Requirement 14.1: Persist all health check results (success and failure)
 func TestExecuteCheck_FailedCheckPersistence(t *testing.T) {
-	// Create test HTTP server that returns 500
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "test-monitor",
 		Name:          "Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -695,7 +648,9 @@ func TestExecuteCheck_FailedCheckPersistence(t *testing.T) {
 	monitorRepo := &mockMonitorRepo{monitor: monitor}
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusInternalServerError, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, NewMockHealthCheckAlertService(), nil)
 
 	ctx := context.Background()

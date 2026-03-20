@@ -3,9 +3,10 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,9 +14,20 @@ import (
 	"web-tracker/interface/alertchannel"
 )
 
+type webhookRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f webhookRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func newWebhookTestAdapter(fn webhookRoundTripFunc) *alertchannel.WebhookAdapter {
+	return alertchannel.NewWebhookAdapterWithClient(&http.Client{
+		Transport: fn,
+	})
+}
+
 func TestWebhookAdapter_Send_Success(t *testing.T) {
-	// Create a test server that simulates webhook endpoint
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	adapter := newWebhookTestAdapter(func(r *http.Request) (*http.Response, error) {
 		// Verify request method and content type
 		if r.Method != "POST" {
 			t.Errorf("expected POST request, got %s", r.Method)
@@ -66,14 +78,12 @@ func TestWebhookAdapter_Send_Success(t *testing.T) {
 		}
 
 		// Return success response
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "received",
-		})
-	}))
-	defer server.Close()
-
-	adapter := alertchannel.NewWebhookAdapter()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"status":"received"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})
 
 	alert := &domain.Alert{
 		ID:        "alert-1",
@@ -90,7 +100,7 @@ func TestWebhookAdapter_Send_Success(t *testing.T) {
 	}
 
 	config := map[string]string{
-		"webhook_url":            server.URL,
+		"webhook_url":            "https://webhook.example.com/alerts",
 		"header_X-Custom-Header": "custom-value",
 	}
 
@@ -126,13 +136,15 @@ func TestWebhookAdapter_Send_MissingURL(t *testing.T) {
 }
 
 func TestWebhookAdapter_Send_ServerError(t *testing.T) {
-	// Create a test server that returns error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	adapter := alertchannel.NewWebhookAdapter()
+	var attemptCount atomic.Int32
+	adapter := newWebhookTestAdapter(func(r *http.Request) (*http.Response, error) {
+		attemptCount.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	})
 
 	alert := &domain.Alert{
 		ID:       "alert-1",
@@ -143,7 +155,7 @@ func TestWebhookAdapter_Send_ServerError(t *testing.T) {
 	}
 
 	config := map[string]string{
-		"webhook_url": server.URL,
+		"webhook_url": "https://webhook.example.com/alerts",
 	}
 
 	ctx := context.Background()
@@ -154,6 +166,9 @@ func TestWebhookAdapter_Send_ServerError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to send webhook after 3 attempts") {
 		t.Errorf("expected retry error message, got: %v", err)
+	}
+	if attemptCount.Load() != 3 {
+		t.Errorf("expected 3 attempts, got %d", attemptCount.Load())
 	}
 }
 

@@ -67,6 +67,7 @@ jobs:
     needs: build-and-push
 
     steps:
+
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:

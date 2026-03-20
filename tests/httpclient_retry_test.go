@@ -2,8 +2,9 @@ package tests
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,16 +15,33 @@ import (
 	"web-tracker/infrastructure/httpclient"
 )
 
-func TestDoWithRetry_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func newTestClient(fn roundTripFunc) *httpclient.Client {
+	return httpclient.NewClientFromHTTPClient(&http.Client{
+		Transport: fn,
+	})
+}
+
+func newResponse(statusCode int) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Body:       io.NopCloser(http.NoBody),
+		Header:     make(http.Header),
+	}
+}
+
+func TestDoWithRetry_Success(t *testing.T) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
+		return newResponse(http.StatusOK), nil
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -38,17 +56,13 @@ func TestDoWithRetry_Success(t *testing.T) {
 func TestDoWithRetry_HTTPErrorNotRetried(t *testing.T) {
 	var attemptCount atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
 		attemptCount.Add(1)
-		// Always return 500 error
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return newResponse(http.StatusInternalServerError), nil
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -64,15 +78,12 @@ func TestDoWithRetry_HTTPErrorNotRetried(t *testing.T) {
 }
 
 func TestDoWithRetry_NetworkError(t *testing.T) {
-	// Create a server and immediately close it to simulate network errors
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	serverURL := server.URL
-	server.Close() // Close immediately to cause connection errors
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("simulated network error")
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -88,14 +99,12 @@ func TestDoWithRetry_NetworkError(t *testing.T) {
 }
 
 func TestDoWithRetry_ExponentialBackoff(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	serverURL := server.URL
-	server.Close() // Close to cause errors and trigger retries
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("simulated network error")
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -115,15 +124,13 @@ func TestDoWithRetry_ExponentialBackoff(t *testing.T) {
 }
 
 func TestDoWithRetry_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	serverURL := server.URL
-	server.Close() // Close to cause errors
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("simulated network error")
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -137,17 +144,14 @@ func TestDoWithRetry_ContextCancellation(t *testing.T) {
 }
 
 func TestGetWithRetry_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
 		assert.Equal(t, http.MethodGet, r.Method)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return newResponse(http.StatusOK), nil
+	})
 	ctx := context.Background()
 
 	config := httpclient.DefaultRetryConfig()
-	resp, err := client.GetWithRetry(ctx, server.URL, config)
+	resp, err := client.GetWithRetry(ctx, "http://example.com", config)
 
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -174,17 +178,13 @@ func TestDefaultRetryConfig(t *testing.T) {
 
 func TestDoWithRetry_MaxAttemptsRespected(t *testing.T) {
 	var attemptCount atomic.Int32
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
 		attemptCount.Add(1)
-	}))
-	serverURL := server.URL
-	server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return nil, errors.New("simulated network error")
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.RetryConfig{
@@ -198,8 +198,7 @@ func TestDoWithRetry_MaxAttemptsRespected(t *testing.T) {
 
 	require.Error(t, err)
 
-	// Should attempt exactly 3 times
-	// Verify by checking elapsed time: 100ms + 200ms = 300ms minimum
+	assert.Equal(t, int32(3), attemptCount.Load())
 	assert.GreaterOrEqual(t, elapsed, 300*time.Millisecond)
 	assert.Less(t, elapsed, 1*time.Second)
 }
@@ -207,16 +206,13 @@ func TestDoWithRetry_MaxAttemptsRespected(t *testing.T) {
 func TestDoWithRetry_ImmediateSuccess(t *testing.T) {
 	var attemptCount atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
 		attemptCount.Add(1)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return newResponse(http.StatusOK), nil
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -234,26 +230,16 @@ func TestDoWithRetry_ImmediateSuccess(t *testing.T) {
 func TestDoWithRetry_NetworkErrorThenSuccess(t *testing.T) {
 	var attemptCount atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
 		count := attemptCount.Add(1)
 		if count == 1 {
-			// First attempt: close connection to simulate network error
-			hj, ok := w.(http.Hijacker)
-			if ok {
-				conn, _, _ := hj.Hijack()
-				conn.Close()
-				return
-			}
+			return nil, errors.New("simulated network error")
 		}
-		// Subsequent attempts: succeed
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return newResponse(http.StatusOK), nil
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.DefaultRetryConfig()
@@ -268,14 +254,12 @@ func TestDoWithRetry_NetworkErrorThenSuccess(t *testing.T) {
 }
 
 func TestDoWithRetry_CustomBackoffTiming(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	serverURL := server.URL
-	server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newTestClient(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("simulated network error")
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	config := httpclient.RetryConfig{

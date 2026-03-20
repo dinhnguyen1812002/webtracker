@@ -3,30 +3,21 @@ package tests
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"web-tracker/domain"
-	"web-tracker/infrastructure/httpclient"
 	"web-tracker/usecase"
 )
 
 // TestHealthCheckPersistence_Integration tests the complete flow of health check persistence
 // This test validates Requirement 14.1: Save health check results to database and update metrics cache
 func TestHealthCheckPersistence_Integration(t *testing.T) {
-	// Create test HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-	defer server.Close()
-
 	// Setup monitor
 	monitor := &domain.Monitor{
 		ID:            "integration-test-monitor",
 		Name:          "Integration Test Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -36,7 +27,9 @@ func TestHealthCheckPersistence_Integration(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 	alertService := NewMockHealthCheckAlertService()
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, "OK"), nil
+	})
 
 	// Create service
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, alertService, nil)
@@ -125,16 +118,10 @@ func TestHealthCheckPersistence_Integration(t *testing.T) {
 // TestHealthCheckPersistence_FailedCheck tests that failed checks are also persisted
 // This validates that both successful and failed health checks are saved to the database
 func TestHealthCheckPersistence_FailedCheck(t *testing.T) {
-	// Create test HTTP server that returns 500
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "failed-check-monitor",
 		Name:          "Failed Check Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -143,7 +130,9 @@ func TestHealthCheckPersistence_FailedCheck(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 	alertService := NewMockHealthCheckAlertService()
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusInternalServerError, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, alertService, nil)
 
 	ctx := context.Background()
@@ -179,16 +168,10 @@ func TestHealthCheckPersistence_FailedCheck(t *testing.T) {
 // TestHealthCheckPersistence_WithSSL tests persistence of health checks with SSL info
 // This validates that SSL certificate information is correctly persisted
 func TestHealthCheckPersistence_WithSSL(t *testing.T) {
-	// Create HTTPS test server
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "ssl-check-monitor",
 		Name:          "SSL Check Monitor",
-		URL:           server.URL,
+		URL:           "https://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -197,7 +180,9 @@ func TestHealthCheckPersistence_WithSSL(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 	alertService := NewMockHealthCheckAlertService()
-	httpClient := httpclient.NewClientFromHTTPClient(server.Client())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newTLSResponse(http.StatusOK, true), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, alertService, nil)
 
 	ctx := context.Background()
@@ -241,15 +226,10 @@ func TestHealthCheckPersistence_WithSSL(t *testing.T) {
 // TestHealthCheckPersistence_MultipleChecks tests that multiple health checks are persisted correctly
 // This validates that the system can handle multiple sequential health checks
 func TestHealthCheckPersistence_MultipleChecks(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
 	monitor := &domain.Monitor{
 		ID:            "multi-check-monitor",
 		Name:          "Multi Check Monitor",
-		URL:           server.URL,
+		URL:           "http://example.com",
 		CheckInterval: domain.CheckInterval1Min,
 		Enabled:       true,
 	}
@@ -258,7 +238,9 @@ func TestHealthCheckPersistence_MultipleChecks(t *testing.T) {
 	healthCheckRepo := &mockHealthCheckRepo{}
 	redisClient := &mockRedisClient{}
 	alertService := NewMockHealthCheckAlertService()
-	httpClient := httpclient.NewClient(httpclient.DefaultConfig())
+	httpClient := newStubHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return newStubResponse(http.StatusOK, ""), nil
+	})
 	service := usecase.NewHealthCheckService(httpClient, healthCheckRepo, monitorRepo, redisClient, alertService, nil)
 
 	ctx := context.Background()

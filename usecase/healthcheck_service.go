@@ -20,6 +20,7 @@ type HealthCheckService struct {
 	monitorRepo          domain.MonitorRepository
 	redisClient          RedisClient
 	retryConfig          httpclient.RetryConfig
+	requestTimeout       time.Duration
 	alertService         HealthCheckAlertService
 	performanceThreshold time.Duration // Default threshold for performance alerts
 	websocketBroadcaster WebSocketBroadcaster
@@ -50,6 +51,7 @@ func NewHealthCheckService(
 		monitorRepo:          monitorRepo,
 		redisClient:          redisClient,
 		retryConfig:          httpclient.DefaultRetryConfig(),
+		requestTimeout:       30 * time.Second,
 		alertService:         alertService,
 		performanceThreshold: 5 * time.Second, // Default 5-second threshold
 		websocketBroadcaster: websocketBroadcaster,
@@ -59,6 +61,16 @@ func NewHealthCheckService(
 // SetPerformanceThreshold sets the performance alert threshold
 func (s *HealthCheckService) SetPerformanceThreshold(threshold time.Duration) {
 	s.performanceThreshold = threshold
+}
+
+// SetRetryConfig overrides the retry behavior used for outgoing health check requests.
+func (s *HealthCheckService) SetRetryConfig(config httpclient.RetryConfig) {
+	s.retryConfig = config
+}
+
+// SetRequestTimeout overrides the per-request timeout used for outgoing health check requests.
+func (s *HealthCheckService) SetRequestTimeout(timeout time.Duration) {
+	s.requestTimeout = timeout
 }
 
 // ExecuteCheck performs a health check for the specified monitor
@@ -136,7 +148,7 @@ func (s *HealthCheckService) ExecuteCheck(ctx context.Context, monitorID string)
 // Requirement 1.6: Retry up to 2 additional times with exponential backoff
 func (s *HealthCheckService) executeHTTPRequest(ctx context.Context, url string) (*http.Response, error) {
 	// Create context with 30-second timeout (Requirement 1.5)
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, s.requestTimeout)
 	defer cancel()
 
 	// Execute request with retry logic (Requirement 1.6)

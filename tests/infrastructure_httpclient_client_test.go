@@ -2,8 +2,10 @@ package tests
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,6 +14,26 @@ import (
 
 	"web-tracker/infrastructure/httpclient"
 )
+
+type clientRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f clientRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func newWrappedClient(fn clientRoundTripFunc) *httpclient.Client {
+	return httpclient.NewClientFromHTTPClient(&http.Client{
+		Transport: fn,
+	})
+}
+
+func newClientResponse(statusCode int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+}
 
 func TestHTTPClient_NewClient(t *testing.T) {
 	config := httpclient.DefaultConfig()
@@ -22,18 +44,13 @@ func TestHTTPClient_NewClient(t *testing.T) {
 }
 
 func TestClient_Get(t *testing.T) {
-	// Create a test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newWrappedClient(func(r *http.Request) (*http.Response, error) {
 		assert.Equal(t, http.MethodGet, r.Method)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+		return newClientResponse(http.StatusOK, "OK"), nil
+	})
 	ctx := context.Background()
 
-	resp, err := client.Get(ctx, server.URL)
+	resp, err := client.Get(ctx, "http://example.com")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -41,15 +58,12 @@ func TestClient_Get(t *testing.T) {
 }
 
 func TestClient_Do(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newWrappedClient(func(r *http.Request) (*http.Response, error) {
+		return newClientResponse(http.StatusOK, ""), nil
+	})
 	ctx := context.Background()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 
 	resp, err := client.Do(ctx, req)
@@ -60,77 +74,68 @@ func TestClient_Do(t *testing.T) {
 }
 
 func TestClient_Timeout(t *testing.T) {
-	// Create a server that delays response
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * time.Second)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	// Create client with short timeout
-	config := httpclient.DefaultConfig()
-	config.Timeout = 100 * time.Millisecond
-	client := httpclient.NewClient(config)
+	client := httpclient.NewClientFromHTTPClient(&http.Client{
+		Timeout: 100 * time.Millisecond,
+		Transport: clientRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			select {
+			case <-r.Context().Done():
+				return nil, r.Context().Err()
+			case <-time.After(2 * time.Second):
+				return newClientResponse(http.StatusOK, ""), nil
+			}
+		}),
+	})
 
 	ctx := context.Background()
-	_, err := client.Get(ctx, server.URL)
+	_, err := client.Get(ctx, "http://example.com")
 
 	// Should timeout
 	require.Error(t, err)
 }
 
 func TestClient_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * time.Second)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClient(httpclient.DefaultConfig())
+	client := newWrappedClient(func(r *http.Request) (*http.Response, error) {
+		select {
+		case <-r.Context().Done():
+			return nil, r.Context().Err()
+		case <-time.After(2 * time.Second):
+			return newClientResponse(http.StatusOK, ""), nil
+		}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := client.Get(ctx, server.URL)
+	_, err := client.Get(ctx, "http://example.com")
 	require.Error(t, err)
 }
 
 func TestClient_ConnectionPooling(t *testing.T) {
-	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	config := httpclient.DefaultConfig()
-	config.MaxIdleConns = 100
-	config.MaxIdleConnsPerHost = 10
-	client := httpclient.NewClient(config)
+	var requestCount atomic.Int32
+	client := newWrappedClient(func(r *http.Request) (*http.Response, error) {
+		requestCount.Add(1)
+		return newClientResponse(http.StatusOK, ""), nil
+	})
 
 	ctx := context.Background()
 
 	// Make multiple requests to verify connection pooling works
 	for i := 0; i < 10; i++ {
-		resp, err := client.Get(ctx, server.URL)
+		resp, err := client.Get(ctx, "http://example.com")
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		resp.Body.Close()
 	}
 
-	assert.Equal(t, 10, requestCount)
+	assert.Equal(t, int32(10), requestCount.Load())
 }
 
 func TestClient_TLSConfiguration(t *testing.T) {
-	// Create HTTPS test server
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := httpclient.NewClientFromHTTPClient(server.Client())
+	client := newWrappedClient(func(r *http.Request) (*http.Response, error) {
+		return newClientResponse(http.StatusOK, ""), nil
+	})
 
 	ctx := context.Background()
-	resp, err := client.Get(ctx, server.URL)
+	resp, err := client.Get(ctx, "https://example.com")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

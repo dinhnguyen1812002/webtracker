@@ -19,10 +19,21 @@ type WebhookAdapter struct {
 
 // NewWebhookAdapter creates a new Webhook adapter
 func NewWebhookAdapter() *WebhookAdapter {
-	return &WebhookAdapter{
-		httpClient: &http.Client{
+	return NewWebhookAdapterWithClient(&http.Client{
+		Timeout: 10 * time.Second,
+	})
+}
+
+// NewWebhookAdapterWithClient creates a webhook adapter with a custom HTTP client.
+func NewWebhookAdapterWithClient(httpClient *http.Client) *WebhookAdapter {
+	if httpClient == nil {
+		httpClient = &http.Client{
 			Timeout: 10 * time.Second,
-		},
+		}
+	}
+
+	return &WebhookAdapter{
+		httpClient: httpClient,
 	}
 }
 
