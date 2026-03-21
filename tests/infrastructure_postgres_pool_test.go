@@ -42,6 +42,10 @@ func TestDefaultPoolConfig(t *testing.T) {
 	if config.Database == "" {
 		t.Error("Expected non-empty Database")
 	}
+
+	if config.SSLMode != "disable" {
+		t.Errorf("Expected SSLMode to be disable, got %s", config.SSLMode)
+	}
 }
 
 func TestPoolStats(t *testing.T) {

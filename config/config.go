@@ -131,7 +131,7 @@ func DefaultConfig() *Config {
 			Database:        "uptime_monitor",
 			User:            "postgres",
 			Password:        "",
-			SSLMode:         "prefer",
+			SSLMode:         "disable",
 			MaxConnections:  20,
 			MinConnections:  2,
 			ConnectTimeout:  10 * time.Second,

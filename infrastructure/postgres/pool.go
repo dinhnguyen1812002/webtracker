@@ -45,7 +45,7 @@ func DefaultPoolConfig() PoolConfig {
 		User:            "postgres",
 		Password:        "postgres",
 		Database:        "uptime",
-		SSLMode:         "prefer",
+		SSLMode:         "disable",
 		MaxConns:        20,               // Requirement 12.3: Max 20 connections
 		MinConns:        2,                // Keep minimum connections for responsiveness
 		MaxConnLifetime: 30 * time.Minute, // Reduced from 1 hour to prevent stale connections
@@ -57,16 +57,17 @@ func DefaultPoolConfig() PoolConfig {
 func NewPool(ctx context.Context, config PoolConfig) (*pgxpool.Pool, error) {
 	sslMode := config.SSLMode
 	if sslMode == "" {
-		sslMode = "prefer"
+		sslMode = "disable"
 	}
 
 	connString := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		config.Host,
 		config.Port,
 		config.User,
 		config.Password,
 		config.Database,
+		sslMode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(connString)

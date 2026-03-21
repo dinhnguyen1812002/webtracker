@@ -20,7 +20,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 5432, config.Database.Port)
 	assert.Equal(t, "uptime_monitor", config.Database.Database)
 	assert.Equal(t, "postgres", config.Database.User)
-	assert.Equal(t, "prefer", config.Database.SSLMode)
+	assert.Equal(t, "disable", config.Database.SSLMode)
 	assert.Equal(t, 20, config.Database.MaxConnections)
 	assert.Equal(t, 2, config.Database.MinConnections)
 	assert.Equal(t, "localhost:6379", config.Redis.Addr)

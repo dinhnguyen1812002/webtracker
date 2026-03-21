@@ -17,7 +17,7 @@ func main() {
 		database = flag.String("database", "uptime_monitor", "Database name")
 		user     = flag.String("user", "postgres", "Database user")
 		password = flag.String("password", "", "Database password")
-		sslMode  = flag.String("ssl-mode", "prefer", "SSL mode")
+		sslMode  = flag.String("ssl-mode", "disable", "SSL mode")
 		up       = flag.Bool("up", false, "Run migrations up")
 		help     = flag.Bool("help", false, "Show help")
 	)
