@@ -95,6 +95,30 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "text", config.Logging.Format)
 }
 
+func TestLoadFromEnv_UsesDotEnvFile(t *testing.T) {
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.Chdir(tempDir))
+	defer func() {
+		require.NoError(t, os.Chdir(originalDir))
+	}()
+
+	dotEnv := "PORT=9191\nDB_HOST=dotenv.db.local\nLOG_LEVEL=trace\n"
+	require.NoError(t, os.WriteFile(".env", []byte(dotEnv), 0644))
+
+	os.Unsetenv("PORT")
+	os.Unsetenv("DB_HOST")
+	os.Unsetenv("LOG_LEVEL")
+
+	config := configpkg.LoadFromEnv()
+
+	assert.Equal(t, 9191, config.Server.Port)
+	assert.Equal(t, "dotenv.db.local", config.Database.Host)
+	assert.Equal(t, "trace", config.Logging.Level)
+}
+
 // substituteEnvVars is unexported; environment substitution is validated via LoadFromFile tests.
 
 func TestLoadFromFile_YAML(t *testing.T) {
@@ -155,6 +179,39 @@ logging:
 	assert.Equal(t, "test_chat", config.Alert.Telegram.ChatID)
 	assert.Equal(t, "debug", config.Logging.Level)
 	assert.Equal(t, "text", config.Logging.Format)
+}
+
+func TestLoadFromFile_YAML_SubstitutesFromDotEnvFile(t *testing.T) {
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.Chdir(tempDir))
+	defer func() {
+		require.NoError(t, os.Chdir(originalDir))
+	}()
+
+	require.NoError(t, os.WriteFile(".env", []byte("DB_PASSWORD=dotenv_password\n"), 0644))
+
+	yamlContent := `
+database:
+  password: "${DB_PASSWORD}"
+`
+
+	tmpFile, err := os.CreateTemp(tempDir, "config_test_*.yaml")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.WriteString(yamlContent)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	os.Unsetenv("DB_PASSWORD")
+
+	config, err := configpkg.LoadFromFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	assert.Equal(t, "dotenv_password", config.Database.Password)
 }
 
 func TestLoadFromFile_JSON(t *testing.T) {

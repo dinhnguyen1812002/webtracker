@@ -214,100 +214,100 @@ func LoadFromEnv() *Config {
 	config := DefaultConfig()
 
 	// Server configuration
-	if port := os.Getenv("PORT"); port != "" {
+	if port := getEnv("PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
 			config.Server.Port = p
 		}
 	}
-	if host := os.Getenv("HOST"); host != "" {
+	if host := getEnv("HOST"); host != "" {
 		config.Server.Host = host
 	}
 
 	// Database configuration
-	if host := os.Getenv("DB_HOST"); host != "" {
+	if host := getEnv("DB_HOST"); host != "" {
 		config.Database.Host = host
 	}
-	if port := os.Getenv("DB_PORT"); port != "" {
+	if port := getEnv("DB_PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
 			config.Database.Port = p
 		}
 	}
-	if dbName := os.Getenv("DB_NAME"); dbName != "" {
+	if dbName := getEnv("DB_NAME"); dbName != "" {
 		config.Database.Database = dbName
 	}
-	if user := os.Getenv("DB_USER"); user != "" {
+	if user := getEnv("DB_USER"); user != "" {
 		config.Database.User = user
 	}
-	if password := os.Getenv("DB_PASSWORD"); password != "" {
+	if password := getEnv("DB_PASSWORD"); password != "" {
 		config.Database.Password = password
-	} else if password := os.Getenv("POSTGRES_PASSWORD"); password != "" {
+	} else if password := getEnv("POSTGRES_PASSWORD"); password != "" {
 		config.Database.Password = password
 	}
-	if sslMode := os.Getenv("DB_SSL_MODE"); sslMode != "" {
+	if sslMode := getEnv("DB_SSL_MODE"); sslMode != "" {
 		config.Database.SSLMode = sslMode
 	}
 
 	// Redis configuration
-	if addr := os.Getenv("REDIS_ADDR"); addr != "" {
+	if addr := getEnv("REDIS_ADDR"); addr != "" {
 		config.Redis.Addr = addr
 	}
-	if password := os.Getenv("REDIS_PASSWORD"); password != "" {
+	if password := getEnv("REDIS_PASSWORD"); password != "" {
 		config.Redis.Password = password
 	}
-	if db := os.Getenv("REDIS_DB"); db != "" {
+	if db := getEnv("REDIS_DB"); db != "" {
 		if d, err := strconv.Atoi(db); err == nil {
 			config.Redis.DB = d
 		}
 	}
-	if enabled := os.Getenv("REDIS_ENABLED"); enabled != "" {
+	if enabled := getEnv("REDIS_ENABLED"); enabled != "" {
 		config.Redis.Enabled = strings.ToLower(enabled) == "true"
 	}
 
 	// Alert configuration
-	if botToken := os.Getenv("TELEGRAM_BOT_TOKEN"); botToken != "" {
+	if botToken := getEnv("TELEGRAM_BOT_TOKEN"); botToken != "" {
 		config.Alert.Telegram.BotToken = botToken
 		config.Alert.Telegram.Enabled = true
 	}
-	if chatID := os.Getenv("TELEGRAM_CHAT_ID"); chatID != "" {
+	if chatID := getEnv("TELEGRAM_CHAT_ID"); chatID != "" {
 		config.Alert.Telegram.ChatID = chatID
 	}
 
-	if smtpHost := os.Getenv("SMTP_HOST"); smtpHost != "" {
+	if smtpHost := getEnv("SMTP_HOST"); smtpHost != "" {
 		config.Alert.Email.SMTPHost = smtpHost
 		config.Alert.Email.Enabled = true
 	}
-	if smtpPort := os.Getenv("SMTP_PORT"); smtpPort != "" {
+	if smtpPort := getEnv("SMTP_PORT"); smtpPort != "" {
 		if p, err := strconv.Atoi(smtpPort); err == nil {
 			config.Alert.Email.SMTPPort = p
 		}
 	}
-	if username := os.Getenv("SMTP_USERNAME"); username != "" {
+	if username := getEnv("SMTP_USERNAME"); username != "" {
 		config.Alert.Email.Username = username
 	}
-	if password := os.Getenv("SMTP_PASSWORD"); password != "" {
+	if password := getEnv("SMTP_PASSWORD"); password != "" {
 		config.Alert.Email.Password = password
 	}
-	if fromAddr := os.Getenv("SMTP_FROM_ADDRESS"); fromAddr != "" {
+	if fromAddr := getEnv("SMTP_FROM_ADDRESS"); fromAddr != "" {
 		config.Alert.Email.FromAddress = fromAddr
 	}
 
-	if webhookURL := os.Getenv("WEBHOOK_URL"); webhookURL != "" {
+	if webhookURL := getEnv("WEBHOOK_URL"); webhookURL != "" {
 		config.Alert.Webhook.URL = webhookURL
 		config.Alert.Webhook.Enabled = true
 	}
 
 	// Worker configuration
-	if poolSize := os.Getenv("WORKER_POOL_SIZE"); poolSize != "" {
+	if poolSize := getEnv("WORKER_POOL_SIZE"); poolSize != "" {
 		if p, err := strconv.Atoi(poolSize); err == nil {
 			config.Worker.PoolSize = p
 		}
 	}
 
 	// Logging configuration
-	if level := os.Getenv("LOG_LEVEL"); level != "" {
+	if level := getEnv("LOG_LEVEL"); level != "" {
 		config.Logging.Level = level
 	}
-	if format := os.Getenv("LOG_FORMAT"); format != "" {
+	if format := getEnv("LOG_FORMAT"); format != "" {
 		config.Logging.Format = format
 	}
 
@@ -320,7 +320,7 @@ func substituteEnvVars(content string) string {
 	re1 := regexp.MustCompile(`\$\{([^}]+)\}`)
 	content = re1.ReplaceAllStringFunc(content, func(match string) string {
 		varName := match[2 : len(match)-1] // Remove ${ and }
-		if value := os.Getenv(varName); value != "" {
+		if value := getEnv(varName); value != "" {
 			return value
 		}
 		return match // Return original if env var not found
@@ -330,7 +330,7 @@ func substituteEnvVars(content string) string {
 	re2 := regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)`)
 	content = re2.ReplaceAllStringFunc(content, func(match string) string {
 		varName := match[1:] // Remove $
-		if value := os.Getenv(varName); value != "" {
+		if value := getEnv(varName); value != "" {
 			return value
 		}
 		return match // Return original if env var not found

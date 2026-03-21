@@ -18,8 +18,6 @@ import (
 	httpInterface "web-tracker/interface/http"
 	"web-tracker/interface/websocket"
 	"web-tracker/usecase"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -29,13 +27,6 @@ func main() {
 	// Initialize structured logging
 	logger.Init(logger.LevelInfo)
 	log := logger.GetLogger()
-
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
-		log.Warn("No .env file found or failed to load, using system environment variables only", logger.Fields{
-			"error": err.Error(),
-		})
-	}
 
 	// Initialize memory profiler and apply optimizations
 	memProfiler := profiling.NewMemoryProfiler()

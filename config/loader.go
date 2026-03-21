@@ -92,88 +92,88 @@ func loadDefaultConfigFile() (*Config, error) {
 // Only merges values that are explicitly set via environment variables
 func mergeConfigsSelectively(fileConfig, envConfig *Config) {
 	// Server config
-	if os.Getenv("PORT") != "" {
+	if hasEnv("PORT") {
 		fileConfig.Server.Port = envConfig.Server.Port
 	}
-	if os.Getenv("HOST") != "" {
+	if hasEnv("HOST") {
 		fileConfig.Server.Host = envConfig.Server.Host
 	}
 
 	// Database config
-	if os.Getenv("DB_HOST") != "" {
+	if hasEnv("DB_HOST") {
 		fileConfig.Database.Host = envConfig.Database.Host
 	}
-	if os.Getenv("DB_PORT") != "" {
+	if hasEnv("DB_PORT") {
 		fileConfig.Database.Port = envConfig.Database.Port
 	}
-	if os.Getenv("DB_NAME") != "" {
+	if hasEnv("DB_NAME") {
 		fileConfig.Database.Database = envConfig.Database.Database
 	}
-	if os.Getenv("DB_USER") != "" {
+	if hasEnv("DB_USER") {
 		fileConfig.Database.User = envConfig.Database.User
 	}
-	if os.Getenv("DB_PASSWORD") != "" || os.Getenv("POSTGRES_PASSWORD") != "" {
+	if hasEnv("DB_PASSWORD") || hasEnv("POSTGRES_PASSWORD") {
 		fileConfig.Database.Password = envConfig.Database.Password
 	}
-	if os.Getenv("DB_SSL_MODE") != "" {
+	if hasEnv("DB_SSL_MODE") {
 		fileConfig.Database.SSLMode = envConfig.Database.SSLMode
 	}
 
 	// Redis config
-	if os.Getenv("REDIS_ADDR") != "" {
+	if hasEnv("REDIS_ADDR") {
 		fileConfig.Redis.Addr = envConfig.Redis.Addr
 	}
-	if os.Getenv("REDIS_PASSWORD") != "" {
+	if hasEnv("REDIS_PASSWORD") {
 		fileConfig.Redis.Password = envConfig.Redis.Password
 	}
-	if os.Getenv("REDIS_DB") != "" {
+	if hasEnv("REDIS_DB") {
 		fileConfig.Redis.DB = envConfig.Redis.DB
 	}
-	if os.Getenv("REDIS_ENABLED") != "" {
+	if hasEnv("REDIS_ENABLED") {
 		fileConfig.Redis.Enabled = envConfig.Redis.Enabled
 	}
 
 	// Alert config - only merge if environment variables are set
-	if os.Getenv("TELEGRAM_BOT_TOKEN") != "" {
+	if hasEnv("TELEGRAM_BOT_TOKEN") {
 		fileConfig.Alert.Telegram.BotToken = envConfig.Alert.Telegram.BotToken
 		fileConfig.Alert.Telegram.Enabled = envConfig.Alert.Telegram.Enabled
 	}
-	if os.Getenv("TELEGRAM_CHAT_ID") != "" {
+	if hasEnv("TELEGRAM_CHAT_ID") {
 		fileConfig.Alert.Telegram.ChatID = envConfig.Alert.Telegram.ChatID
 	}
 
-	if os.Getenv("SMTP_HOST") != "" {
+	if hasEnv("SMTP_HOST") {
 		fileConfig.Alert.Email.SMTPHost = envConfig.Alert.Email.SMTPHost
 		fileConfig.Alert.Email.Enabled = envConfig.Alert.Email.Enabled
 	}
-	if os.Getenv("SMTP_PORT") != "" {
+	if hasEnv("SMTP_PORT") {
 		fileConfig.Alert.Email.SMTPPort = envConfig.Alert.Email.SMTPPort
 	}
-	if os.Getenv("SMTP_USERNAME") != "" {
+	if hasEnv("SMTP_USERNAME") {
 		fileConfig.Alert.Email.Username = envConfig.Alert.Email.Username
 	}
-	if os.Getenv("SMTP_PASSWORD") != "" {
+	if hasEnv("SMTP_PASSWORD") {
 		fileConfig.Alert.Email.Password = envConfig.Alert.Email.Password
 	}
-	if os.Getenv("SMTP_FROM_ADDRESS") != "" {
+	if hasEnv("SMTP_FROM_ADDRESS") {
 		fileConfig.Alert.Email.FromAddress = envConfig.Alert.Email.FromAddress
 	}
 
-	if os.Getenv("WEBHOOK_URL") != "" {
+	if hasEnv("WEBHOOK_URL") {
 		fileConfig.Alert.Webhook.URL = envConfig.Alert.Webhook.URL
 		fileConfig.Alert.Webhook.Enabled = envConfig.Alert.Webhook.Enabled
 	}
 
 	// Worker config
-	if os.Getenv("WORKER_POOL_SIZE") != "" {
+	if hasEnv("WORKER_POOL_SIZE") {
 		fileConfig.Worker.PoolSize = envConfig.Worker.PoolSize
 	}
 
 	// Logging config
-	if os.Getenv("LOG_LEVEL") != "" {
+	if hasEnv("LOG_LEVEL") {
 		fileConfig.Logging.Level = envConfig.Logging.Level
 	}
-	if os.Getenv("LOG_FORMAT") != "" {
+	if hasEnv("LOG_FORMAT") {
 		fileConfig.Logging.Format = envConfig.Logging.Format
 	}
 }
