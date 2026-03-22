@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -15,6 +16,8 @@ type MetricsServiceImpl struct {
 	healthCheckRepo domain.HealthCheckRepository
 	redisClient     MetricsRedisClient
 }
+
+const metricsCacheTimeout = 250 * time.Millisecond
 
 // NewMetricsService creates a new metrics service
 func NewMetricsService(healthCheckRepo domain.HealthCheckRepository, redisClient MetricsRedisClient) MetricsService {
@@ -39,12 +42,9 @@ func (s *MetricsServiceImpl) GetUptimePercentage(ctx context.Context, monitorID 
 	// Try to get from cache first
 	cacheKey := fmt.Sprintf("cache:metrics:%s:uptime", monitorID)
 	var stats UptimeStats
-	found, err := s.redisClient.GetJSON(ctx, cacheKey, &stats)
-	if err != nil {
-		// Log error but continue with calculation
+	if found, err := s.getCachedJSON(ctx, cacheKey, &stats); err != nil {
 		fmt.Printf("Failed to get uptime from cache: %v\n", err)
-	}
-	if found {
+	} else if found {
 		return &stats, nil
 	}
 
@@ -79,7 +79,7 @@ func (s *MetricsServiceImpl) GetUptimePercentage(ctx context.Context, monitorID 
 	}
 
 	// Cache the results for 1 minute
-	if err := s.redisClient.SetJSON(ctx, cacheKey, stats, time.Minute); err != nil {
+	if err := s.setCachedJSON(ctx, cacheKey, stats, time.Minute); err != nil {
 		// Log error but don't fail the request
 		fmt.Printf("Failed to cache uptime stats: %v\n", err)
 	}
@@ -117,12 +117,9 @@ func (s *MetricsServiceImpl) GetResponseTimeStats(ctx context.Context, monitorID
 	// Try to get from cache first
 	cacheKey := fmt.Sprintf("cache:metrics:%s:response:%s", monitorID, period.String())
 	var stats ResponseTimeStats
-	found, err := s.redisClient.GetJSON(ctx, cacheKey, &stats)
-	if err != nil {
-		// Log error but continue with calculation
+	if found, err := s.getCachedJSON(ctx, cacheKey, &stats); err != nil {
 		fmt.Printf("Failed to get response time stats from cache: %v\n", err)
-	}
-	if found {
+	} else if found {
 		return &stats, nil
 	}
 
@@ -163,7 +160,7 @@ func (s *MetricsServiceImpl) GetResponseTimeStats(ctx context.Context, monitorID
 	}
 
 	// Cache the results for 1 minute
-	if err := s.redisClient.SetJSON(ctx, cacheKey, stats, time.Minute); err != nil {
+	if err := s.setCachedJSON(ctx, cacheKey, stats, time.Minute); err != nil {
 		// Log error but don't fail the request
 		fmt.Printf("Failed to cache response time stats: %v\n", err)
 	}
@@ -236,4 +233,52 @@ func (s *MetricsServiceImpl) GetResponseTimeStats24h(ctx context.Context, monito
 // GetResponseTimeStats7d calculates response time statistics for the last 7 days
 func (s *MetricsServiceImpl) GetResponseTimeStats7d(ctx context.Context, monitorID string) (*ResponseTimeStats, error) {
 	return s.GetResponseTimeStats(ctx, monitorID, 7*24*time.Hour)
+}
+
+func (s *MetricsServiceImpl) getCachedJSON(parent context.Context, key string, dest interface{}) (bool, error) {
+	if s.redisClient == nil {
+		return false, nil
+	}
+
+	ctx, cancel := cacheContext(parent)
+	defer cancel()
+
+	found, err := s.redisClient.GetJSON(ctx, key, dest)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return found, err
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return false, nil
+	}
+	return found, err
+}
+
+func (s *MetricsServiceImpl) setCachedJSON(parent context.Context, key string, value interface{}, ttl time.Duration) error {
+	if s.redisClient == nil {
+		return nil
+	}
+
+	ctx, cancel := cacheContext(parent)
+	defer cancel()
+
+	err := s.redisClient.SetJSON(ctx, key, value, ttl)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return err
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return nil
+	}
+	return err
+}
+
+func cacheContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), metricsCacheTimeout)
+	}
+
+	deadline := time.Now().Add(metricsCacheTimeout)
+	if existingDeadline, ok := parent.Deadline(); ok && existingDeadline.Before(deadline) {
+		return context.WithDeadline(parent, existingDeadline)
+	}
+	return context.WithTimeout(parent, metricsCacheTimeout)
 }

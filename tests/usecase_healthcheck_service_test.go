@@ -579,6 +579,7 @@ func TestExecuteCheck_MetricsCacheInvalidation(t *testing.T) {
 
 	// Verify expected cache keys were deleted
 	expectedKeys := []string{
+		"cache:metrics:test-monitor-123:uptime",
 		"cache:metrics:test-monitor-123:uptime:24h",
 		"cache:metrics:test-monitor-123:uptime:7d",
 		"cache:metrics:test-monitor-123:uptime:30d",

@@ -286,6 +286,7 @@ func (s *HealthCheckService) persistHealthCheck(ctx context.Context, healthCheck
 func (s *HealthCheckService) invalidateMetricsCache(ctx context.Context, monitorID string) {
 	// Invalidate uptime percentage cache for all time periods
 	cacheKeys := []string{
+		fmt.Sprintf("cache:metrics:%s:uptime", monitorID),
 		fmt.Sprintf("cache:metrics:%s:uptime:24h", monitorID),
 		fmt.Sprintf("cache:metrics:%s:uptime:7d", monitorID),
 		fmt.Sprintf("cache:metrics:%s:uptime:30d", monitorID),
