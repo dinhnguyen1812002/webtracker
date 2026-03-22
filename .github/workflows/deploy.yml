@@ -26,7 +26,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
+      - name: Run tests
+        run: go test -v ./...
 
   build-and-push:
     runs-on: ubuntu-latest
