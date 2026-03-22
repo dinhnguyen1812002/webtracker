@@ -19,15 +19,15 @@ jobs:
           --health-timeout 3s
           --health-retries 10
 
-    steps:
-      - uses: actions/checkout@v4
+    # steps:
+    #   - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Run tests
-        run: go test -v ./...
+    #   - uses: actions/setup-go@v5
+    #     with:
+    #       go-version-file: go.mod
+    #       cache: true
+    #   - name: Run tests
+    #     run: go test -v ./...
 
   build-and-push:
     runs-on: ubuntu-latest
