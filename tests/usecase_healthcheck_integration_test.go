@@ -89,6 +89,7 @@ func TestHealthCheckPersistence_Integration(t *testing.T) {
 
 	// Verify all expected cache keys were deleted
 	expectedCacheKeys := []string{
+		"cache:metrics:integration-test-monitor:uptime",
 		"cache:metrics:integration-test-monitor:uptime:24h",
 		"cache:metrics:integration-test-monitor:uptime:7d",
 		"cache:metrics:integration-test-monitor:uptime:30d",
@@ -274,8 +275,8 @@ func TestHealthCheckPersistence_MultipleChecks(t *testing.T) {
 	}
 
 	// Verify cache was invalidated for each check
-	// Each check should invalidate 6 cache keys
-	expectedInvalidations := numChecks * 6
+	// Each check should invalidate 7 cache keys
+	expectedInvalidations := numChecks * 7
 	if len(redisClient.deletedKeys) != expectedInvalidations {
 		t.Errorf("Expected %d cache invalidations, got %d", expectedInvalidations, len(redisClient.deletedKeys))
 	}
