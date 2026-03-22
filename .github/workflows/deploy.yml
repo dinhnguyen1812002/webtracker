@@ -48,7 +48,7 @@ jobs:
         run: go mod download   # Nếu có go.mod, nếu không thì bỏ hoặc thay bằng lệnh khác
 
       - name: Run tests
-        run: go test ./... -v  # Thay bằng lệnh test thật của bạn
+        run: go test -v -count=1 ./...  # Thay bằng lệnh test thật của bạn
 
   build-and-push:
     name: Build & Push Docker Image
