@@ -96,6 +96,8 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3   # Pin version cụ thể để tránh breaking changes
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -103,9 +105,6 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT || '22' }}
           script_stop: true
           envs: IMAGE_TAG
-          env:
-            IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-
           script: |
             set -euo pipefail   # Dừng ngay nếu có lỗi
 
