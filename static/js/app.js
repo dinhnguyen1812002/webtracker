@@ -13,6 +13,10 @@
   var reconnectAttempts = 0;
   var MAX_RECONNECT = 5;
   var RECONNECT_DELAY = 1000;
+  var modalState = {
+    isEdit: false,
+    monitorID: ''
+  };
 
   function connect() {
     var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -95,6 +99,237 @@
     var lc = el.querySelector('.last-check');
     if (lc && data.checked_at) lc.textContent = new Date(data.checked_at).toLocaleString();
   }
+
+  function getModalElements() {
+    return {
+      dialog: document.getElementById('monitor-modal'),
+      form: document.getElementById('monitor-form'),
+      monitorID: document.getElementById('monitor-id'),
+      title: document.getElementById('modal-title'),
+      submitBtn: document.getElementById('modal-submit-btn'),
+      errorBox: document.getElementById('modal-error'),
+      errorText: document.getElementById('modal-error-text'),
+      name: document.getElementById('monitor-name'),
+      url: document.getElementById('monitor-url'),
+      interval: document.getElementById('monitor-interval'),
+      enabled: document.getElementById('monitor-enabled'),
+      telegramEnabled: document.getElementById('telegram-enabled'),
+      telegramDetails: document.getElementById('telegram-details'),
+      telegramBotToken: document.getElementById('telegram-bot-token'),
+      telegramChatID: document.getElementById('telegram-chat-id'),
+      emailEnabled: document.getElementById('email-enabled'),
+      emailDetails: document.getElementById('email-details'),
+      emailTo: document.getElementById('email-to'),
+      webhookEnabled: document.getElementById('webhook-enabled'),
+      webhookDetails: document.getElementById('webhook-details'),
+      webhookURL: document.getElementById('webhook-url')
+    };
+  }
+
+  function showModal(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+      return;
+    }
+    dialog.setAttribute('open', 'open');
+  }
+
+  function hideModal(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.close === 'function') {
+      dialog.close();
+      return;
+    }
+    dialog.removeAttribute('open');
+  }
+
+  function setChannelSection(checkbox, details, enabled) {
+    if (!checkbox || !details) return;
+    checkbox.checked = enabled;
+    details.open = enabled;
+  }
+
+  function clearModalError(elements) {
+    if (!elements.errorBox || !elements.errorText) return;
+    elements.errorBox.classList.add('hidden');
+    elements.errorText.textContent = '';
+  }
+
+  function showModalError(elements, message) {
+    if (!elements.errorBox || !elements.errorText) return;
+    elements.errorText.textContent = message || 'Something went wrong.';
+    elements.errorBox.classList.remove('hidden');
+  }
+
+  function resetMonitorForm() {
+    var elements = getModalElements();
+    if (!elements.form) return elements;
+
+    elements.form.reset();
+    modalState.isEdit = false;
+    modalState.monitorID = '';
+    if (elements.monitorID) elements.monitorID.value = '';
+    if (elements.title) elements.title.textContent = 'Add Monitor';
+    if (elements.submitBtn) {
+      elements.submitBtn.textContent = 'Create';
+      elements.submitBtn.disabled = false;
+    }
+    if (elements.enabled) elements.enabled.checked = true;
+    setChannelSection(elements.telegramEnabled, elements.telegramDetails, false);
+    setChannelSection(elements.emailEnabled, elements.emailDetails, false);
+    setChannelSection(elements.webhookEnabled, elements.webhookDetails, false);
+    clearModalError(elements);
+    return elements;
+  }
+
+  function findAlertChannel(channels, type) {
+    if (!Array.isArray(channels)) return null;
+    for (var i = 0; i < channels.length; i++) {
+      if (channels[i] && channels[i].type === type) return channels[i];
+    }
+    return null;
+  }
+
+  function buildMonitorPayload(elements) {
+    var payload = new URLSearchParams();
+
+    payload.set('name', elements.name ? elements.name.value.trim() : '');
+    payload.set('url', elements.url ? elements.url.value.trim() : '');
+    payload.set('check_interval', elements.interval ? elements.interval.value : '');
+
+    if (elements.enabled && elements.enabled.checked) {
+      payload.set('enabled', 'on');
+    }
+    if (elements.telegramEnabled && elements.telegramEnabled.checked) {
+      payload.set('telegram_enabled', 'on');
+      payload.set('telegram_bot_token', elements.telegramBotToken ? elements.telegramBotToken.value.trim() : '');
+      payload.set('telegram_chat_id', elements.telegramChatID ? elements.telegramChatID.value.trim() : '');
+    }
+    if (elements.emailEnabled && elements.emailEnabled.checked) {
+      payload.set('email_enabled', 'on');
+      payload.set('email_to', elements.emailTo ? elements.emailTo.value.trim() : '');
+    }
+    if (elements.webhookEnabled && elements.webhookEnabled.checked) {
+      payload.set('webhook_enabled', 'on');
+      payload.set('webhook_url', elements.webhookURL ? elements.webhookURL.value.trim() : '');
+    }
+    if (modalState.isEdit) {
+      payload.set('_method', 'PUT');
+    }
+
+    return payload;
+  }
+
+  function submitPayload(action, payload) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = action;
+    form.style.display = 'none';
+
+    payload.forEach(function (value, key) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  function openNewMonitorModal() {
+    var elements = resetMonitorForm();
+    if (!elements.dialog) {
+      window.location.href = '/monitors/new';
+      return;
+    }
+    showModal(elements.dialog);
+  }
+
+  function openEditMonitorModal(monitorID) {
+    if (!monitorID) return;
+
+    var elements = resetMonitorForm();
+    if (!elements.dialog) {
+      window.location.href = '/monitors/' + encodeURIComponent(monitorID) + '/edit';
+      return;
+    }
+
+    modalState.isEdit = true;
+    modalState.monitorID = monitorID;
+    if (elements.monitorID) elements.monitorID.value = monitorID;
+    if (elements.title) elements.title.textContent = 'Edit Monitor';
+    if (elements.submitBtn) elements.submitBtn.textContent = 'Save Changes';
+    showModal(elements.dialog);
+
+    fetch('/api/v1/monitors/' + encodeURIComponent(monitorID), {
+      headers: {
+        Accept: 'application/json'
+      },
+      credentials: 'same-origin'
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('Failed to load monitor details.');
+        }
+        return response.json();
+      })
+      .then(function (monitor) {
+        if (elements.name) elements.name.value = monitor.name || '';
+        if (elements.url) elements.url.value = monitor.url || '';
+        if (elements.interval) elements.interval.value = monitor.check_interval != null ? String(monitor.check_interval) : '';
+        if (elements.enabled) elements.enabled.checked = !!monitor.enabled;
+
+        var telegram = findAlertChannel(monitor.alert_channels, 'telegram');
+        setChannelSection(elements.telegramEnabled, elements.telegramDetails, !!telegram);
+        if (elements.telegramBotToken) elements.telegramBotToken.value = telegram && telegram.config ? telegram.config.bot_token || '' : '';
+        if (elements.telegramChatID) elements.telegramChatID.value = telegram && telegram.config ? telegram.config.chat_id || '' : '';
+
+        var email = findAlertChannel(monitor.alert_channels, 'email');
+        setChannelSection(elements.emailEnabled, elements.emailDetails, !!email);
+        if (elements.emailTo) elements.emailTo.value = email && email.config ? email.config.to || '' : '';
+
+        var webhook = findAlertChannel(monitor.alert_channels, 'webhook');
+        setChannelSection(elements.webhookEnabled, elements.webhookDetails, !!webhook);
+        if (elements.webhookURL) elements.webhookURL.value = webhook && webhook.config ? webhook.config.url || '' : '';
+      })
+      .catch(function () {
+        showModalError(elements, 'Unable to load monitor details right now.');
+      });
+  }
+
+  function closeMonitorModal() {
+    var elements = getModalElements();
+    if (!elements.dialog) return;
+    hideModal(elements.dialog);
+    clearModalError(elements);
+    if (elements.submitBtn) elements.submitBtn.disabled = false;
+  }
+
+  function submitMonitorForm(event) {
+    if (event) event.preventDefault();
+
+    var elements = getModalElements();
+    if (!elements.form) return false;
+
+    clearModalError(elements);
+    if (elements.submitBtn) elements.submitBtn.disabled = true;
+
+    var payload = buildMonitorPayload(elements);
+    var action = modalState.isEdit && modalState.monitorID
+      ? '/monitors/' + encodeURIComponent(modalState.monitorID)
+      : '/monitors';
+
+    submitPayload(action, payload);
+    return false;
+  }
+
+  window.openNewMonitorModal = openNewMonitorModal;
+  window.openEditMonitorModal = openEditMonitorModal;
+  window.closeMonitorModal = closeMonitorModal;
+  window.submitMonitorForm = submitMonitorForm;
 
   connect();
 })();

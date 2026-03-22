@@ -74,10 +74,10 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT }}
           script_stop: true
           script: |
-            cd /home/webtracker
 
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            cd /home/webtracker
+            docker compose pull
+            docker compose up -d --build --remove-orphans --force-recreate --no-deps uptime-monitor-app
 
             sleep 5
             curl -f http://localhost:8080/health || (echo "Health check failed" && exit 1)

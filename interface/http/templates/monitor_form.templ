@@ -164,13 +164,19 @@ templ MonitorForm(data MonitorFormData) {
 		@Layout(fmt.Sprintf("Edit: %s", data.Monitor.Name), data.User) {
 			@MonitorFormModal()
 			<script>
-				openEditMonitorModal({ fmt.Sprintf("%q", data.Monitor.ID) });
+				window.addEventListener('load', function () {
+					openEditMonitorModal({ fmt.Sprintf("%q", data.Monitor.ID) });
+				});
 			</script>
 		}
 	} else {
 		@Layout("Add Monitor", data.User) {
 			@MonitorFormModal()
-			<script>openNewMonitorModal();</script>
+			<script>
+				window.addEventListener('load', function () {
+					openNewMonitorModal();
+				});
+			</script>
 		}
 	}
 }
